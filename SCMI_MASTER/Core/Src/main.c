@@ -22,49 +22,12 @@
 #include "SYSTICK.h"
 #include "NVIC.h"
 
-#include "TIMERx.h"
-
-uint8_t algo, buffOCEN[4]={0}, buffPolar[4]={0};
-float buffduty[4]={0};
-uint16_t load;
-uint32_t buffOutfreq=1;//1Hz
-TIM_HandlerDef timer1;
-
-void TIMx_RestartStruct(TIM_HandlerDef * tim, TIM_TypeDef * timerbase);
-
 int main(void)
 {
 	//Los prescaladores se seleccionan por n=1,2,...,8. Siendo 2^n el valor del preescalador
 	SystClock_Init(2,0,80,0,0,0);//SYSCLK -> PLLP, SYSPLL -> HSI, SYSCLK -> 80MHz, preAHB1 -> divided by 2^0
 	//preAPB1 -> Not divided, preAPB2 -> not divided, APB1 = 40MHZ, APB2=80MHz.
-	//STK_CONF(currentAHB1CLK);//Configurar después de SYSTCLOCK_INIT, no configurar al usar TIMERS
-	TIMx_RestartStruct(&timer1,TIM1);
-    timer1.Parameter.channel_mode[0]=TIM_MODE_OUTPWM;
-    timer1.Parameter.channel_mode[1]=TIM_MODE_OUTPWM;
-    //PA7 CH1N, PA8 CH1, PA9 CH2 y PB0 CH2N
-    TIMx_GPIO_Init(GPIOA, 7, 1);
-    TIMx_GPIO_Init(GPIOA, 8, 1);
-    TIMx_GPIO_Init(GPIOA, 9, 1);
-    buffOCEN[0]=TIM_CCxE_OCxOCxN_En, buffOCEN[1]=TIM_CCxE_OCx_En;
-    buffPolar[0]=TIM_CCxP_OCxOCxN_LOW, buffPolar[1]=TIM_CCxP_OCxN_LOW;
-    buffduty[0]=10,  buffduty[1]=50, buffduty[2]=0, buffduty[3]=0 ;//10%, 80% duty cycle
-    //0->Edge aligned; 0->Reset; 0->Upcounter
-    TIMx_Init(&timer1, 0, 0, 0, buffOCEN, buffPolar, buffOutfreq, buffduty);
-    //TIMx_SetDTG(&timer1, 80, 100);//80->MHz, 100->ns
-
+	NVIC_SetCFGR(30, 3);
     /* Loop forever */
-    while(1){
-    	timer1.Registers->CCR2 = 0x1900;
-    }
-}
-
-void TIMx_RestartStruct( TIM_HandlerDef * time ,TIM_TypeDef * timerbase){
-    time->Registers = timerbase;
-    time->Load=0;
-    time->Prescaler=0;
-    time->Parameter.channel_mode[0]=0;
-    time->Parameter.channel_mode[1]=0;
-    time->Parameter.channel_mode[2]=0;
-    time->Parameter.channel_mode[3]=0;
-
+	for(;;);
 }
