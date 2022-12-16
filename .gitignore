@@ -1,6 +1,5 @@
-/.metadata/
 #settings
-/.settings/
+.settings/
 
 #metadata
 .metadata/
@@ -51,3 +50,8 @@ release
 *.su
 *.idb
 *.pdb
+
+#Other of project 
+*.project
+*.launch
+*.Id
