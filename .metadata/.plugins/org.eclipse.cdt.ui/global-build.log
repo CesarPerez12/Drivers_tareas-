@@ -1,24 +1,7 @@
-22:40:20 **** Incremental Build of configuration Debug for project SCMI_MASTER ****
+21:50:45 **** Incremental Build of configuration Debug for project SCMI_MASTER ****
 make -j12 all 
-arm-none-eabi-gcc "../Drivers_LIESE/Drivers_Peripherals/Src/TIMERx.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DSTM32 -DSTM32F4 -DSTM32F446RETx -DNUCLEO_F446RE -c -I../Core/Inc -I../Drivers_LIESE/Drivers_Peripherals/Inc -I../Drivers_LIESE/Inc -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -MMD -MP -MF"Drivers_LIESE/Drivers_Peripherals/Src/TIMERx.d" -MT"Drivers_LIESE/Drivers_Peripherals/Src/TIMERx.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Drivers_LIESE/Drivers_Peripherals/Src/TIMERx.o"
-arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DSTM32 -DSTM32F4 -DSTM32F446RETx -DNUCLEO_F446RE -c -I../Core/Inc -I../Drivers_LIESE/Drivers_Peripherals/Inc -I../Drivers_LIESE/Inc -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/main.o"
-../Drivers_LIESE/Drivers_Peripherals/Src/TIMERx.c: In function 'TIMx_OPM':
-../Drivers_LIESE/Drivers_Peripherals/Src/TIMERx.c:247:56: warning: passing argument 4 of 'TIMx_InternalCLK' from incompatible pointer type [-Wincompatible-pointer-types]
-  247 |  TIMx_InternalCLK(tim, currentSYSCLK*1000000, outfreq, duty, numchannel);
-      |                                                        ^~~~
-      |                                                        |
-      |                                                        uint8_t * {aka unsigned char *}
-../Drivers_LIESE/Drivers_Peripherals/Src/TIMERx.c:116:89: note: expected 'float *' but argument is of type 'uint8_t *' {aka 'unsigned char *'}
-  116 | bool TIMx_InternalCLK(TIM_HandlerDef * tim, uint32_t in_Freq, uint32_t out_Freq, float *duty, uint8_t numchannels){//could be float duty
-      |                                                                                  ~~~~~~~^~~~
-arm-none-eabi-gcc -o "SCMI_MASTER.elf" @"objects.list"   -mcpu=cortex-m4 -T"C:\Users\jurl9\SCMI_MASTER\SCMI_MASTER\STM32F446RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="SCMI_MASTER.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
-Finished building target: SCMI_MASTER.elf
- 
 arm-none-eabi-size   SCMI_MASTER.elf 
-arm-none-eabi-objdump -h -S  SCMI_MASTER.elf  > "SCMI_MASTER.list"
    text	   data	    bss	    dec	    hex	filename
-   8864	     12	   1604	  10480	   28f0	SCMI_MASTER.elf
+   3284	      8	   1568	   4860	   12fc	SCMI_MASTER.elf
 Finished building: default.size.stdout
- 
-Finished building: SCMI_MASTER.list
  
