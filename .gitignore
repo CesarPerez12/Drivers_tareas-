@@ -54,4 +54,5 @@ release
 #Other of project 
 *.project
 *.launch
-*.Id
+*.ld
+*.s
