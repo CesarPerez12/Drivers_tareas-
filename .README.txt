@@ -11,3 +11,5 @@
 //2. Inc: Contiene las cabeceras de otros elementos independientes
 //   a los periféricos, pero que son necesarios para el micro
 //3. Src: Contiene los arcihvos fuentes del punto anterior.
+//4. Drivers_LIESE se tiene pensado configurar para agregar más 
+//   carpetas de otros drivers, ej. Drivers_Flash, Drivers_GYRO, etc.
