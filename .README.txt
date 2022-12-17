@@ -1,0 +1,13 @@
+//INDICA LA CONFORMACIÓN DEL PROYECTO
+
+//EXISTEN DOS CARPETAS PARA EL CÓDIGO: Drivers_LIESE y Core
+
+//Core: Contiene el main para trabajar con las bibliotecas
+
+//Drivers_LIESE: Esta Carpeta contiene varias carpetas:
+//1. Drivers_Peripheral: Contiene dos carpetas Inc y Src, en ellas 
+//   se agrega la configuración y definición de los periféricos a 
+//   manejar
+//2. Inc: Contiene las cabeceras de otros elementos independientes
+//   a los periféricos, pero que son necesarios para el micro
+//3. Src: Contiene los arcihvos fuentes del punto anterior.
