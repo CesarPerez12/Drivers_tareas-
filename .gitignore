@@ -56,3 +56,4 @@ release
 *.launch
 *.ld
 *.s
+*.cproject
