@@ -45,6 +45,7 @@ typedef struct
 #define GPIOG               ((GPIO_TypeDef *) GPIOG_BASE)
 #define GPIOH               ((GPIO_TypeDef *) GPIOH_BASE)
 
+
 /******************************************************************************/
 /*                                                                            */
 /*                            General Purpose I/O                             */
