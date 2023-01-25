@@ -899,6 +899,7 @@ typedef struct
 
 //Simplified Definitions
 #define GPIO_OTYPER_PP                   0UL //Push pull
+#define GPIO_OTYPER_OD                   1UL //Open Drain
 #define GPIO_OSPEEDR_0                   0UL //
 #define GPIO_MODER_MODE_AF               2UL //Alternate Function
 #define GPIO_OSPEEDR_HS                  3UL //High Speed
