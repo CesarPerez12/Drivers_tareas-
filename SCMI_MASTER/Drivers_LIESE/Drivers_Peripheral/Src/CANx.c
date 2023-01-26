@@ -30,3 +30,22 @@ void CANx_Init(CAN_Handler * canBus){
 	canBus->Register->MCR &= ~CAN_MCR_DBF;//CAN working during debug
 
 }
+
+void CANx_ConfFilter(CAN_Handler * canBus, bool dual_mode, uint32_t ID, uint32_t Mask){
+
+	if(!dual_mode){//Un solo módulo CAN para usar
+		canBus->Register->FMR |= CAN_FMR_FINIT;//Initialization mode for the filters.
+		canBus->Register->FMR &= ~(0x3F<<CAN_FMR_CAN2SB_Pos);//All 28 filters managed by one can
+		canBus->Register->FA1R &= ~0xFFFFFFF;//Desactive Filters
+		canBus->Register->FS1R |= CAN_FS1R_FSC|CAN_FS1R_FSC10; //Single 32 bits scale, for all 28 filters
+		canBus->Register->FiR[1].FiR1 |= ID;//ID for 32 bits scale
+		canBus->Register->FiR[1].FiR2 |= Mask;//Mask for 32 bits scale, 1->Compare
+		canBus->Register->FM1R &= ~0xFFFFFFF; //Filter mode. 0: Two 32-bit registers of filter bank x are in Identifier Mask mode.
+		canBus->Register->FFA1R &= ~0xFFFFFFF;// assigned to FIFO 0
+		canBus->Register->FA1R |= 0xFFFFFFF;//active Filters
+		canBus->Register->FMR &= ~CAN_FMR_FINIT;//Initialization mode off
+	}
+}
+
+
+//MAILBOX Rgister
