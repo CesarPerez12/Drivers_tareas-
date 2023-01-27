@@ -6,7 +6,6 @@
  */
 
 #include "CANx.h"
-#include "GPIOx.h"
 #include "RCC.h"
 
 
@@ -15,7 +14,7 @@ void CANx_GPIO(GPIO_TypeDef *Port_, uint8_t Pin_){
 	GPIOx_InitAF(Port_, Pin_, GPIO_OTYPER_OD, GPIO_OSPEEDR_HS, GPIO_MODER_MODE_AF);
 }
 
-void CANx_Init(CAN_Handler * canBus, bool dual_mode){
+void CANx_Init(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, bool dual_mode, uint8_t nofltrCANslave,  uint8_t nofltrArray){
 
 	if(dual_mode){
 		SET_BIT(RCC_APB1ENR , RCC_APB1ENR_CAN1EN | RCC_APB1ENR_CAN2EN);
@@ -41,76 +40,123 @@ void CANx_Init(CAN_Handler * canBus, bool dual_mode){
 	CLEAR_BIT(canBus->Register->MCR, CAN_MCR_RESET);//Normal operation.
 	CLEAR_BIT(canBus->Register->MCR, CAN_MCR_DBF);//CAN working during debug
 
-}
+	CANx_BitTiming(canBus, 1000, 16, 0);
 
-void CANx_CfgFilter(CAN_Handler * canBus, bool dual_mode, uint32_t ID, uint32_t Mask){
+	CANx_CfgFilters(canBus, fltr, dual_mode, nofltrCANslave, nofltrArray);
 
-	if(!dual_mode){//Un solo módulo CAN para usar
+	CLEAR_BIT(canBus->Register->MCR, CAN_MCR_INRQ);//Initialization request off
 
-		SET_BIT(canBus->Register->FMR, CAN_FMR_FINIT);//Initialization mode for the filters.
-		CLEAR_BIT(canBus->Register->FMR, (0x3F<<CAN_FMR_CAN2SB_Pos));//All 28 filters managed by one can
-		CLEAR_BIT(canBus->Register->FA1R, 0xFFFFFFF);//Desactive Filters
-		SET_BIT(canBus->Register->FS1R, CAN_FS1R_FSC|CAN_FS1R_FSC10);//Single 32 bits scale, for all 28 filters
-		SET_BIT(canBus->Register->FiR[1].FiR1, ID);//ID for 32 bits scale
-		SET_BIT(canBus->Register->FiR[1].FiR2, Mask);//Mask for 32 bits scale, 1->Compare
-		CLEAR_BIT(canBus->Register->FM1R, 0xFFFFFFF);//Filter mode. 0: Two 32-bit registers of filter bank x are in Identifier Mask mode.
-		CLEAR_BIT(canBus->Register->FFA1R, 0xFFFFFFF);// assigned to FIFO 0
-		SET_BIT(canBus->Register->FA1R, 0xFFFFFFF);//active Filters
-		CLEAR_BIT(canBus->Register->FMR, CAN_FMR_FINIT);//Initialization mode off
-
-	}
 }
 
 /*
- * Mbps Data bit rate Megabits/seg
+ * indexFltr: Select 0-27 filter to configure
+ * bitscale: 16 or 32 bits scale filter
+ * ID: identifier filter
+ * Mask: Mask filter
+ * modeFltr: Select between Identifier Mask Mode or Identifier List Mode
+ * FIFO: Select in which FIFO will be stored data when filter achieves
+ */
+void CANx_SetCfgFilter(CAN_Handler * canBus, CAN_FilterTypeDef * fltr){
+	//SET_BIT(canBus->Register->FMR, CAN_FMR_FINIT);//Initialization mode for the filters.
+	CLEAR_BIT(canBus->Register->FA1R, (1UL<<fltr->indexFltr));//Desactive Filter
+	SET_BIT(canBus->Register->FS1R, (fltr->bitscale&1UL)<<fltr->indexFltr);//Dual 16 bits scale or Single 32 bits scale, for all 28 filters
+	SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR1, fltr->ID);//ID for 16 or 32 bits scale
+	SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR2, fltr->Mask);//Mask for 16 or 32 bits scale, 0->Not compare, 1->Compare
+	SET_BIT(canBus->Register->FM1R, (fltr->modeFltr&1UL)<<fltr->indexFltr);//Filter modes. 0: Two 32-bit registers of filter bank x are in Identifier Mask mode.
+	//1: registers of filter bank x are in Identifier List mode.
+	SET_BIT(canBus->Register->FFA1R, (fltr->FIFO&1UL)<<fltr->indexFltr);// assigned to FIFO 0 or 1
+	SET_BIT(canBus->Register->FA1R, 1UL<<fltr->indexFltr);//active Filter
+	//CLEAR_BIT(canBus->Register->FMR, CAN_FMR_FINIT);//Initialization mode off
+}
+
+void CANx_CfgFilters(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, bool dual_mode, uint8_t nofltrCANslave,  uint8_t nofltrArray){
+
+	uint8_t i=0;
+
+	SET_BIT(canBus->Register->FMR, CAN_FMR_FINIT);//Initialization mode for the filters.
+
+	for (i = 0; i < nofltrArray; ++i) {
+		CANx_SetCfgFilter(canBus, &fltr[i]);
+	}
+
+	if(!dual_mode){//Un solo módulo CAN para usar
+
+		SET_BIT(canBus->Register->FMR, (28<<CAN_FMR_CAN2SB_Pos));//All 28 filters managed by one can
+
+	}
+	else{
+		SET_BIT(canBus->Register->FMR, (nofltrCANslave<<CAN_FMR_CAN2SB_Pos));//filters managed by can slave
+	}
+
+	CLEAR_BIT(canBus->Register->FMR, CAN_FMR_FINIT);//Initialization mode off
+}
+
+/*
+ * kbps Data bit rate Kilobits/seg
  * ntq number of time quanta
  * SJW value for resynchronization
  */
-void CANx_BitTiming(CAN_Handler * canBus, uint16_t Mbps, uint8_t ntq, uint8_t SJW){
+bool CANx_BitTiming(CAN_Handler * canBus, uint16_t kbps, uint8_t ntq, uint8_t SJW){
 
-	uint8_t nt1t2= ntq - 1; //Define total time for t1+t2 = 15
-	uint8_t nt2; //Maximum value Segment 2: Value programmable (8-1)=7
-	uint8_t nt1 = nt1t2 - nt2; //Segment 1
-	uint8_t fq = Mbps * ntq;//fq=1/tq -> tq = tbits/ntq
-	uint8_t BRP = (16 / fq) - 1 ;//(ClockFreq/fq) - 1
+	bool flag=true;
+	uint8_t nt1t2= ntq - 1; //Define total time for tSeg1+tSeg2
+	uint8_t nt1, nt2; //Segment 1 and segment 2. Maximum value Segment 2: Value programmable (8-1)=7
+	uint16_t fq ;//fq=1/tq -> tq = tbits/ntq
+	uint16_t BRP ;//(ClockFreq/fq) - 1
 
 	if(ntq > 25){//Supera el máximo número de tiempo de cuantización
 		ntq = 25; //Colocamos el máximo valor por defecto
 	}
 
-	nt2 = nt1t2 / 2;
+	if(kbps>1000){//Máxima tasa de transferencia 1Mbps CAN 2.0
+		kbps = 1000; //1Mbps
+	}
 
-	if(nt2>=8){
-		nt2 = 8;//Máximo valor Segmento 2
-		nt1 = nt1t2 - nt2;//Valor Segmento 1
+	fq = kbps * ntq;//Calculando frecuencia del tiempo cuántico
+	BRP = ((currentAHB1CLK*1000) / (fq)) - 1;//Baud rate prescaler
+
+	if((BRP<0)||(BRP>1023)){
+		flag=false;//Can't preformance bit rate with Clock frequency
 	}
 	else{
-		nt1t2 = 2; //Rehusamos variables
-		nt2-=nt1t2;//Decrementamos el valor
-		nt1+=nt1t2;//Incrementamos el valor
+		flag=true;
+		nt2 = nt1t2 / 2;
 
+		if(nt2>=8){
+			nt2 = 8;//Máximo valor Segmento 2
+			nt1 = nt1t2 - nt2;//Valor Segmento 1
+		}
+		else{
+			nt1t2 = 2; //Rehusamos variables
+			nt2-=nt1t2;//Decrementamos el valor
+			nt1+=nt1t2;//Incrementamos el valor
 
-		while((nt2<1)||(nt2>8)||(nt1t2==0)){
-			nt1t2--;
-			nt2-=nt1t2;
-			nt1+=nt1t2;
+			while((nt2<1)||(nt2>8)||(nt1t2==0)){
+				nt1t2--;
+				nt2-=nt1t2;
+				nt1+=nt1t2;
+			}
+
+			if((nt2<1)||(nt2>8)){//Verificamos coincidencia
+				nt2 = 1;//Mínimo valor Segmento 2
+				nt1 = nt1t2 - nt2;//Valor Segmento 1
+			}
+
 		}
 
-		if((nt2<1)||(nt2>8)){//Verificamos coincidencia
-			nt2 = 1;//Mínimo valor Segmento 2
-		    nt1 = nt1t2 - nt2;//Valor Segmento 1
+		SET_BIT(canBus->Register->BTR , (BRP<<CAN_BTR_BRP_Pos));//Baud rate prescaler
+		SET_BIT(canBus->Register->BTR , ((nt1-1)<<CAN_BTR_TS1_Pos));//number of time quanta for tS1
+		SET_BIT(canBus->Register->BTR , ((nt2-1)<<CAN_BTR_TS2_Pos));//number of time quanta for tS2
+
+		if(SJW){//Resynchronization
+			SET_BIT(canBus->Register->BTR , (SJW<<CAN_BTR_SJW_Pos));
 		}
-
+		else{
+			CLEAR_BIT(canBus->Register->BTR , (3<<CAN_BTR_SJW_Pos));
+		}
 	}
 
-	SET_BIT(canBus->Register->BTR , (BRP<<CAN_BTR_BRP_Pos));//Baud rate prescaler
-	SET_BIT(canBus->Register->BTR , ((nt1-1)<<CAN_BTR_TS1_Pos));//number of time quanta for tS1
-	SET_BIT(canBus->Register->BTR , ((nt2-1)<<CAN_BTR_TS2_Pos));//number of time quanta for tS2
-
-	if(SJW){//Resynchronization
-
-
-	}
+	return flag;
 
 }
 

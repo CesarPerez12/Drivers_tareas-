@@ -11,8 +11,18 @@
 #include "stdio.h"
 #include "stdbool.h"
 #include "MacroFunctions.h"
+#include "GPIOx.h"
 
 #define CAN_BASE    0x40006400
+
+typedef struct{
+	uint8_t   indexFltr;
+	uint8_t   bitscale;
+	uint32_t  ID;
+	uint32_t  Mask;
+	uint32_t  modeFltr;
+	uint8_t   FIFO;
+}CAN_FilterTypeDef;
 
 //x=0,1,2.
 
@@ -3731,5 +3741,9 @@ typedef struct{
 #define CAN_F13R2_FB31_Msk     (0x1UL << CAN_F13R2_FB31_Pos)                    /*!< 0x80000000 */
 #define CAN_F13R2_FB31         CAN_F13R2_FB31_Msk
 
+void CANx_GPIO(GPIO_TypeDef *Port_, uint8_t Pin_);
+void CANx_Init(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, bool dual_mode, uint8_t nofltrCANslave,  uint8_t nofltrArray);
+void CANx_CfgFilters(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, bool dual_mode, uint8_t nofltrCANslave ,uint8_t nofltrArray);
+bool CANx_BitTiming(CAN_Handler * canBus, uint16_t kbps, uint8_t ntq, uint8_t SJW);
 
 #endif /* DRIVERS_PERIPHERAL_INC_CANX_H_ */
