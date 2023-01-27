@@ -10,6 +10,7 @@
 
 #include "stdio.h"
 #include "stdbool.h"
+#include "MacroFunctions.h"
 
 #define CAN_BASE    0x40006400
 
