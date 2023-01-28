@@ -27,6 +27,9 @@
 int main(void)
 {
 	CAN_FilterTypeDef FLTR[14];
+	CAN_Handler can;
+	CAN_BitTimingTypeDef tq;
+	can.Register=CAN1;
 	//Los prescaladores se seleccionan por n=1,2,...,8. Siendo 2^n el valor del preescalador
 	SystClock_Init(2,0,80,0,0,0);//SYSCLK -> PLLP, SYSPLL -> HSI, SYSCLK -> 80MHz, preAHB1 -> divided by 2^0
 	//preAPB1 -> Not divided, preAPB2 -> not divided, APB1 = 40MHZ, APB2=80MHz.
@@ -36,7 +39,12 @@ int main(void)
 	FLTR[1].indexFltr=11;
 	FLTR[2].indexFltr=12;
 
-	CANx_CfgFilters(CAN1, FLTR, true, 0, 3);
+	tq.ntq = 16;//16 time quantum
+	tq.kbps = 1000;//1Mbps
+	tq.SJW = 0;
+
+	CANx_Init(&can, FLTR, &tq, false, 0, 3);//can struct; array of sturct FLTR; tq struct; false->No dual mode; 0->SJW=0; 3->Number of filters to configure
+
     /* Loop forever */
 	for(;;);
 }

@@ -16,10 +16,18 @@
 #define CAN_BASE    0x40006400
 
 typedef struct{
+	uint16_t  kbps;
+	uint8_t   ntq;
+	uint8_t   SJW;
+}CAN_BitTimingTypeDef;
+
+typedef struct{
 	uint8_t   indexFltr;
 	uint8_t   bitscale;
-	uint32_t  ID;
-	uint32_t  Mask;
+	uint16_t  ID_L;
+	uint16_t  ID_H;
+	uint16_t  Mask_L;
+	uint16_t  Mask_H;
 	uint32_t  modeFltr;
 	uint8_t   FIFO;
 }CAN_FilterTypeDef;
@@ -3742,8 +3750,18 @@ typedef struct{
 #define CAN_F13R2_FB31         CAN_F13R2_FB31_Msk
 
 void CANx_GPIO(GPIO_TypeDef *Port_, uint8_t Pin_);
-void CANx_Init(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, bool dual_mode, uint8_t nofltrCANslave,  uint8_t nofltrArray);
+void CANx_Init(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, CAN_BitTimingTypeDef *tq, bool dual_mode, uint8_t nofltrCANslave,  uint8_t nofltrArray);
 void CANx_CfgFilters(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, bool dual_mode, uint8_t nofltrCANslave ,uint8_t nofltrArray);
-bool CANx_BitTiming(CAN_Handler * canBus, uint16_t kbps, uint8_t ntq, uint8_t SJW);
+bool CANx_BitTiming(CAN_Handler * canBus, CAN_BitTimingTypeDef *tq);
+void CANx_TxData(CAN_Handler * canBus, uint32_t ID, uint32_t DataL, uint32_t DataH, uint8_t DLC, bool ExID, uint8_t indexMailBox);
+void CANx_TxRemote(CAN_Handler * canBus, uint32_t ID, uint8_t DLC, bool ExID, uint8_t indexMailBox);
+void CANx_RxFIFO0(CAN_Handler * canBus, uint32_t * RxData);
+void CANx_RxFIFO1(CAN_Handler * canBus, uint32_t * RxData);
+void CANx_SetInt(CAN_Handler * canBus, uint32_t bitReg);
+void CANx_ResetInt(CAN_Handler * canBus, uint32_t bitReg);
+uint32_t CANx_GetError(CAN_Handler * canBus, uint32_t bitReg);
+bool CANx_TxSuccess(volatile uint32_t *SR, uint8_t indexMailBox);
+void CANx_WaitSetFlag(volatile uint32_t *SR, uint32_t BitReg);
+void CANx_WaitResetFlag(volatile uint32_t *SR, uint32_t BitReg);
 
 #endif /* DRIVERS_PERIPHERAL_INC_CANX_H_ */
