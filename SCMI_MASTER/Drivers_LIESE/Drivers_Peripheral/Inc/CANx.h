@@ -13,6 +13,8 @@
 #include "MacroFunctions.h"
 #include "GPIOx.h"
 
+extern bool CAN1emptyTx[3], CAN2emptyTx[3];
+
 #define CAN_BASE    0x40006400
 
 typedef struct{
@@ -3755,8 +3757,17 @@ void CANx_CfgFilters(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, bool dual_m
 bool CANx_BitTiming(CAN_Handler * canBus, CAN_BitTimingTypeDef *tq);
 void CANx_TxData(CAN_Handler * canBus, uint32_t ID, uint32_t DataL, uint32_t DataH, uint8_t DLC, bool ExID, uint8_t indexMailBox);
 void CANx_TxRemote(CAN_Handler * canBus, uint32_t ID, uint8_t DLC, bool ExID, uint8_t indexMailBox);
-void CANx_RxFIFO0(CAN_Handler * canBus, uint32_t * RxData);
-void CANx_RxFIFO1(CAN_Handler * canBus, uint32_t * RxData);
+uint8_t CANx_RxFIFO0(CAN_Handler * canBus, uint32_t * RxData);
+uint8_t CANx_RxFIFO1(CAN_Handler * canBus, uint32_t * RxData);
+void CANx_BusOffRecovery(CAN_Handler * canBus);
+void CAN1_TX_IRQHandler();
+void CAN1_RX0_IRQHandler();
+void CAN1_RX1_IRQHandler();
+void CAN1_SCE_IRQHandler();
+void CAN2_TX_IRQHandler();
+void CAN2_RX0_IRQHandler();
+void CAN2_RX1_IRQHandler();
+void CAN2_SCE_IRQHandler();
 void CANx_SetInt(CAN_Handler * canBus, uint32_t bitReg);
 void CANx_ResetInt(CAN_Handler * canBus, uint32_t bitReg);
 uint32_t CANx_GetError(CAN_Handler * canBus, uint32_t bitReg);

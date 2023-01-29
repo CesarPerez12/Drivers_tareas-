@@ -8,6 +8,7 @@
 #include "CANx.h"
 #include "RCC.h"
 
+bool CAN1emptyTx[3], CAN2emptyTx[3];
 
 void CANx_GPIO(GPIO_TypeDef *Port_, uint8_t Pin_){
 	RCC_EnPort(Port_);
@@ -228,7 +229,7 @@ void CANx_TxRemote(CAN_Handler * canBus, uint32_t ID, uint8_t DLC, bool ExID, ui
 	//Success
 }
 
-void CANx_RxFIFO0(CAN_Handler * canBus, uint32_t * RxData ){
+uint8_t CANx_RxFIFO0(CAN_Handler * canBus, uint32_t * RxData ){
 	if(canBus->Register->MailBoxFIFORx[0].RIxR && CAN_RI0R_IDE){//Extended Identifier
 		RxData[0] = (canBus->Register->MailBoxFIFORx[0].RIxR & 0xFFFFFFF8)>>CAN_RI0R_EXID_Pos;
 	}
@@ -249,9 +250,11 @@ void CANx_RxFIFO0(CAN_Handler * canBus, uint32_t * RxData ){
 
 	SET_BIT(canBus->Register->RF0R, CAN_RF0R_RFOM0);//Release FIFO output
 
+	return canBus->Register->RF0R & CAN_RF0R_FMP0;//Return status
+
 }
 
-void CANx_RxFIFO1(CAN_Handler * canBus, uint32_t * RxData){
+uint8_t CANx_RxFIFO1(CAN_Handler * canBus, uint32_t * RxData){
 	if(canBus->Register->MailBoxFIFORx[1].RIxR && CAN_RI1R_IDE){//Extended Identifier
 		RxData[0] = (canBus->Register->MailBoxFIFORx[1].RIxR & 0xFFFFFFF8)>>CAN_RI1R_EXID_Pos;
 	}
@@ -271,6 +274,100 @@ void CANx_RxFIFO1(CAN_Handler * canBus, uint32_t * RxData){
 	}
 
 	SET_BIT(canBus->Register->RF1R, CAN_RF1R_RFOM1);//Release FIFO output
+
+	return canBus->Register->RF0R & CAN_RF1R_FMP1;//Return status
+}
+
+void CANx_BusOffRecovery(CAN_Handler * canBus){//Bit TEC>255
+	if(CANx_GetError(canBus, CAN_ESR_BOFF)){
+		SET_BIT(canBus->Register->MCR, CAN_MCR_ABOM);//SET ABOM: Recovering sequence automatic
+	}
+}
+
+void CAN1_TX_IRQHandler(){
+	/* CAN1 TX interrupts                                                 */
+	//Becomes Empty
+	if(CAN1->TSR && CAN_TSR_RQCP0){//Tx0 empty
+		CAN1emptyTx[0]=true;
+	}
+	else if(CAN1->TSR && CAN_TSR_RQCP1){//Tx1 empty
+		CAN1emptyTx[1]=true;
+	}
+	else if(CAN1->TSR && CAN_TSR_RQCP2){//Tx2 empty
+		CAN1emptyTx[2]=true;
+	}
+}
+
+void CAN1_RX0_IRQHandler(){
+	/* CAN1 RX0 interrupts                                                */
+	if(CAN1->RF0R && CAN_RF0R_FMP0){//New Message
+
+	}
+	else if(CAN1->RF0R && CAN_RF0R_FULL0){//FULL FIFO
+
+	}
+	else if(CAN1->RF0R && CAN_RF0R_FOVR0){//OVER FIFO
+
+	}
+
+}
+void CAN1_RX1_IRQHandler(){
+	/* CAN1 RX1 interrupts                                                */
+	if(CAN1->RF1R && CAN_RF1R_FMP1){//New Message
+
+	}
+	else if(CAN1->RF1R && CAN_RF1R_FULL1){//FULL FIFO
+
+	}
+	else if(CAN1->RF1R && CAN_RF1R_FOVR1){//OVER FIFO
+
+	}
+}
+void CAN1_SCE_IRQHandler(){
+	/* CAN1 SCE interrupt                                                 */
+	CAN_Handler can;
+	can.Register = CAN1;
+	if(CANx_GetError(&can, CAN_ESR_EWGF)){
+
+	}
+	else if(CANx_GetError(&can, CAN_ESR_EPVF)){
+
+	}
+	else if(CANx_GetError(&can, CAN_ESR_BOFF)){
+
+	}
+	else if(CANx_GetError(&can, CAN_ESR_LEC)){
+
+	}
+	else if(can.Register->MSR&&CAN_MSR_WKUI){
+
+	}
+	else if(can.Register->MSR&&CAN_MSR_SLAKI){
+
+	}
+}
+
+void CAN2_TX_IRQHandler(){
+	/* CAN2 TX interrupts                                                 */
+	//Becomes Empty
+	if(CAN2->TSR && CAN_TSR_RQCP0){//Tx0 empty
+		CAN2emptyTx[0]=true;
+	}
+	else if(CAN2->TSR && CAN_TSR_RQCP1){//Tx1 empty
+		CAN2emptyTx[1]=true;
+	}
+	else if(CAN2->TSR && CAN_TSR_RQCP2){//Tx2 empty
+		CAN2emptyTx[2]=true;
+	}
+}
+void CAN2_RX0_IRQHandler(){
+	/* CAN1 RX0 interrupts                                                */
+}
+void CAN2_RX1_IRQHandler(){
+	/* CAN1 RX1 interrupts                                                */
+}
+void CAN2_SCE_IRQHandler(){
+	/* CAN1 SCE interrupt                                                 */
 }
 
 void CANx_SetInt(CAN_Handler * canBus, uint32_t bitReg){
