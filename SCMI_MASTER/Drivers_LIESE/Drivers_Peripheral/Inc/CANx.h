@@ -14,6 +14,17 @@
 #include "GPIOx.h"
 
 extern bool CAN1emptyTx[3], CAN2emptyTx[3];
+extern uint32_t *buffRx;
+
+#define CAN1_Tx_IRQ         19UL
+#define CAN1_Rx0_IRQ        20UL
+#define CAN1_Tx1_IRQ        21UL
+#define CAN1_SCE_IRQ        22UL
+
+#define CAN2_Tx_IRQ         63UL
+#define CAN2_Rx0_IRQ        64UL
+#define CAN2_Tx1_IRQ        65UL
+#define CAN2_SCE_IRQ        66UL
 
 #define CAN_BASE    0x40006400
 
@@ -95,6 +106,9 @@ typedef struct{
 
 #define CAN1    ((CAN_TypeDef *)(CAN_BASE + 0x000UL))
 #define CAN2    ((CAN_TypeDef *)(CAN_BASE + 0x400UL))
+
+
+extern CAN_Handler *can1, *can2;
 
 /******************************************************************************/
 /*                                                                            */
@@ -3750,6 +3764,17 @@ typedef struct{
 #define CAN_F13R2_FB31_Pos     (31U)
 #define CAN_F13R2_FB31_Msk     (0x1UL << CAN_F13R2_FB31_Pos)                    /*!< 0x80000000 */
 #define CAN_F13R2_FB31         CAN_F13R2_FB31_Msk
+
+//Simplified Definitions
+#define CAN_FM1R_MaskMode              0UL//Identifier Mask Mode
+#define CAN_FM1R_ListMode              1UL//Identifier List Mode
+
+#define CAN_FS1R_S32                   0UL//Dual 16 bit scale
+#define CAN_FS1R_D16                   1UL//Single 32 bit scale
+
+#define CAN_FFA1R_FIFO0                0UL//Assigned to FIFO 0
+#define CAN_FFA1R_FIFO1                1UL//Assigned to FIFO 1
+
 
 void CANx_GPIO(GPIO_TypeDef *Port_, uint8_t Pin_);
 void CANx_Init(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, CAN_BitTimingTypeDef *tq, bool dual_mode, uint8_t nofltrCANslave,  uint8_t nofltrArray);

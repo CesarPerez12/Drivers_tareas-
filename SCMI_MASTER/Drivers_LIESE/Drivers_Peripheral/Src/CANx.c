@@ -9,6 +9,9 @@
 #include "RCC.h"
 
 bool CAN1emptyTx[3], CAN2emptyTx[3];
+uint8_t errorStatus;
+uint32_t *buffRx;
+CAN_Handler *can1, *can2;
 
 void CANx_GPIO(GPIO_TypeDef *Port_, uint8_t Pin_){
 	RCC_EnPort(Port_);
@@ -284,6 +287,60 @@ void CANx_BusOffRecovery(CAN_Handler * canBus){//Bit TEC>255
 	}
 }
 
+void CANx_CallBackRX0(CAN_Handler *can){
+	if(can->Register->RF0R && CAN_RF0R_FMP0){//New Message
+		CANx_RxFIFO0(can, buffRx);//Lee el nuevo mensaje
+	}
+	else if(can->Register->RF0R && CAN_RF0R_FULL0){//FULL FIFO
+		while(CANx_RxFIFO0(can, buffRx)){//Lee los mensajes
+			buffRx+=32;//Cambiamos de dirección
+		}
+	}
+	else if(can->Register->RF0R && CAN_RF0R_FOVR0){//OVER FIFO
+		while(CANx_RxFIFO0(can, buffRx)){//Lee los mensajes
+			buffRx+=32;//Cambiamos de dirección
+		}
+	}
+}
+
+void CANx_CallBackRX1(CAN_Handler *can){
+	if(can->Register->RF1R && CAN_RF1R_FMP1){//New Message
+		CANx_RxFIFO1(can, buffRx);//Lee el nuevo mensaje
+	}
+	else if(can->Register->RF1R && CAN_RF1R_FULL1){//FULL FIFO
+		while(CANx_RxFIFO1(can, buffRx)){//Lee los mensajes
+			buffRx+=32;//Cambiamos de dirección
+		}
+	}
+	else if(can->Register->RF1R && CAN_RF1R_FOVR1){//OVER FIFO
+		while(CANx_RxFIFO1(can, buffRx)){//Lee los mensajes
+			buffRx+=32;//Cambiamos de dirección
+		}
+	}
+}
+
+void CANx_CallBackSCE(CAN_Handler *can){
+	if(CANx_GetError(can, CAN_ESR_EWGF)){
+		errorStatus=1;//TEC or REC >= 96
+	}
+	else if(CANx_GetError(can, CAN_ESR_EPVF)){
+		errorStatus=2;//TEC or REC >= 127
+	}
+	else if(CANx_GetError(can, CAN_ESR_BOFF)){
+		errorStatus=3;//TEC or REC >= 255
+		CANx_BusOffRecovery(can);//Enters in recovery mode
+	}
+	else if(CANx_GetError(can, CAN_ESR_LEC)){
+		errorStatus=1;//Set error status
+	}
+	else if(can->Register->MSR&&CAN_MSR_WKUI){
+		//Sleep mode
+	}
+	else if(can->Register->MSR&&CAN_MSR_SLAKI){
+		//Wake up mode
+	}
+}
+
 void CAN1_TX_IRQHandler(){
 	/* CAN1 TX interrupts                                                 */
 	//Becomes Empty
@@ -300,51 +357,16 @@ void CAN1_TX_IRQHandler(){
 
 void CAN1_RX0_IRQHandler(){
 	/* CAN1 RX0 interrupts                                                */
-	if(CAN1->RF0R && CAN_RF0R_FMP0){//New Message
-
-	}
-	else if(CAN1->RF0R && CAN_RF0R_FULL0){//FULL FIFO
-
-	}
-	else if(CAN1->RF0R && CAN_RF0R_FOVR0){//OVER FIFO
-
-	}
+	CANx_CallBackRX0(can1);
 
 }
 void CAN1_RX1_IRQHandler(){
 	/* CAN1 RX1 interrupts                                                */
-	if(CAN1->RF1R && CAN_RF1R_FMP1){//New Message
-
-	}
-	else if(CAN1->RF1R && CAN_RF1R_FULL1){//FULL FIFO
-
-	}
-	else if(CAN1->RF1R && CAN_RF1R_FOVR1){//OVER FIFO
-
-	}
+	CANx_CallBackRX1(can1);
 }
 void CAN1_SCE_IRQHandler(){
 	/* CAN1 SCE interrupt                                                 */
-	CAN_Handler can;
-	can.Register = CAN1;
-	if(CANx_GetError(&can, CAN_ESR_EWGF)){
-
-	}
-	else if(CANx_GetError(&can, CAN_ESR_EPVF)){
-
-	}
-	else if(CANx_GetError(&can, CAN_ESR_BOFF)){
-
-	}
-	else if(CANx_GetError(&can, CAN_ESR_LEC)){
-
-	}
-	else if(can.Register->MSR&&CAN_MSR_WKUI){
-
-	}
-	else if(can.Register->MSR&&CAN_MSR_SLAKI){
-
-	}
+	CANx_CallBackSCE(can1);
 }
 
 void CAN2_TX_IRQHandler(){
@@ -362,12 +384,15 @@ void CAN2_TX_IRQHandler(){
 }
 void CAN2_RX0_IRQHandler(){
 	/* CAN1 RX0 interrupts                                                */
+	CANx_CallBackRX0(can2);
 }
 void CAN2_RX1_IRQHandler(){
 	/* CAN1 RX1 interrupts                                                */
+	CANx_CallBackRX1(can2);
 }
 void CAN2_SCE_IRQHandler(){
 	/* CAN1 SCE interrupt                                                 */
+	CANx_CallBackSCE(can2);
 }
 
 void CANx_SetInt(CAN_Handler * canBus, uint32_t bitReg){
