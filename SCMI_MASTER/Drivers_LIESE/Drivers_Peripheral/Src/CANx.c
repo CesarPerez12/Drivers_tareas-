@@ -214,7 +214,7 @@ void CANx_TxData(CAN_Handler * canBus, uint32_t ID, uint32_t DataL, uint32_t Dat
 
 }
 //Trama Remota
-void CANx_TxRemote(CAN_Handler * canBus, uint32_t ID, uint8_t DLC, bool ExID, uint8_t indexMailBox){
+void CANx_TxRemote(CAN_Handler * canBus, uint32_t ID, bool ExID, uint8_t indexMailBox){
 
 	if(ExID){
 		SET_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR, CAN_TI0R_IDE);//Extended identifier.
@@ -225,7 +225,7 @@ void CANx_TxRemote(CAN_Handler * canBus, uint32_t ID, uint8_t DLC, bool ExID, ui
 		SET_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR, ID<<CAN_TI0R_STID_Pos);//ID
 	}
 	SET_BIT(canBus->Register->MailBoxTx[1].TIxR, CAN_TI1R_RTR);//Remote frame
-	SET_BIT(canBus->Register->MailBoxTx[2].TDTxR, DLC);//Data length max 8 bytes
+	//SET_BIT(canBus->Register->MailBoxTx[2].TDTxR, DLC);//Data length max 8 bytes
 	SET_BIT(canBus->Register->MailBoxTx[1].TIxR , CAN_TI0R_TXRQ);//Transmission request
 
 	CANx_TxSuccess(&(canBus->Register->TSR), indexMailBox);

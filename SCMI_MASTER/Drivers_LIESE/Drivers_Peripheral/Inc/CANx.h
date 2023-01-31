@@ -3781,7 +3781,7 @@ void CANx_Init(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, CAN_BitTimingType
 void CANx_CfgFilters(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, bool dual_mode, uint8_t nofltrCANslave ,uint8_t nofltrArray);
 bool CANx_BitTiming(CAN_Handler * canBus, CAN_BitTimingTypeDef *tq);
 void CANx_TxData(CAN_Handler * canBus, uint32_t ID, uint32_t DataL, uint32_t DataH, uint8_t DLC, bool ExID, uint8_t indexMailBox);
-void CANx_TxRemote(CAN_Handler * canBus, uint32_t ID, uint8_t DLC, bool ExID, uint8_t indexMailBox);
+void CANx_TxRemote(CAN_Handler * canBus, uint32_t ID, bool ExID, uint8_t indexMailBox);
 uint8_t CANx_RxFIFO0(CAN_Handler * canBus, uint32_t * RxData);
 uint8_t CANx_RxFIFO1(CAN_Handler * canBus, uint32_t * RxData);
 void CANx_BusOffRecovery(CAN_Handler * canBus);
