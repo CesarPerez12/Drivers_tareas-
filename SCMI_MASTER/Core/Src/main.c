@@ -52,6 +52,7 @@ int main(void)
 
 	CANx_TxData(&can, 1200, 0x1111, 0x1111, 8, false, 0);
 	CANx_TxData(&can, 0xFFFFFFFF, 0x2222, 0x2222, 8, false, 1);
+	//Use LEC error for better performance
 
     /* Loop forever */
 	for(;;);

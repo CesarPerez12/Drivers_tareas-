@@ -3796,6 +3796,8 @@ void CAN2_SCE_IRQHandler();
 void CANx_SetInt(CAN_Handler * canBus, uint32_t bitReg);
 void CANx_ResetInt(CAN_Handler * canBus, uint32_t bitReg);
 uint32_t CANx_GetError(CAN_Handler * canBus, uint32_t bitReg);
+uint8_t CANx_GetLEC(CAN_Handler * canBus);
+void CANx_SetLEC(CAN_Handler * canBus);
 bool CANx_TxSuccess(volatile uint32_t *SR, uint8_t indexMailBox);
 void CANx_WaitSetFlag(volatile uint32_t *SR, uint32_t BitReg);
 void CANx_WaitResetFlag(volatile uint32_t *SR, uint32_t BitReg);

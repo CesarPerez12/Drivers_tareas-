@@ -211,6 +211,7 @@ void CANx_TxData(CAN_Handler * canBus, uint32_t ID, uint32_t DataL, uint32_t Dat
 
 	CANx_TxSuccess(&(canBus->Register->TSR), indexMailBox);
 	//Success
+	CANx_SetLEC(canBus);//Actualizamos el estado de error LEC
 
 }
 //Trama Remota
@@ -230,55 +231,63 @@ void CANx_TxRemote(CAN_Handler * canBus, uint32_t ID, bool ExID, uint8_t indexMa
 
 	CANx_TxSuccess(&(canBus->Register->TSR), indexMailBox);
 	//Success
+	CANx_SetLEC(canBus);//Actualizamos el estado de error LEC
+
 }
 
 uint8_t CANx_RxFIFO0(CAN_Handler * canBus, uint32_t * RxData ){
-	if(canBus->Register->MailBoxFIFORx[0].RIxR && CAN_RI0R_IDE){//Extended Identifier
-		RxData[0] = (canBus->Register->MailBoxFIFORx[0].RIxR & 0xFFFFFFF8)>>CAN_RI0R_EXID_Pos;
-	}
-	else{//Standard Identifier
-		RxData[0] = (canBus->Register->MailBoxFIFORx[0].RIxR & 0xFFE00000)>>CAN_RI0R_STID_Pos;
-	}
+	if(canBus->Register->RF0R && CAN_RF0R_FMP0){
+		if(CANx_GetLEC(canBus)!=CAN_ESR_LEC){//Revisamos si el último mensaje recibido tuvo algún error
+			if(canBus->Register->MailBoxFIFORx[0].RIxR && CAN_RI0R_IDE){//Extended Identifier
+				RxData[0] = (canBus->Register->MailBoxFIFORx[0].RIxR & 0xFFFFFFF8)>>CAN_RI0R_EXID_Pos;
+			}
+			else{//Standard Identifier
+				RxData[0] = (canBus->Register->MailBoxFIFORx[0].RIxR & 0xFFE00000)>>CAN_RI0R_STID_Pos;
+			}
 
-	RxData[1]=canBus->Register->MailBoxFIFORx[0].RDTxR & 0xF;//Data Length Code
+			RxData[1]=canBus->Register->MailBoxFIFORx[0].RDTxR & 0xF;//Data Length Code
 
-	if(!(canBus->Register->MailBoxFIFORx[0].RIxR && CAN_RI0R_RTR)){//Data frame
-		RxData[2]=canBus->Register->MailBoxFIFORx[0].RDLxR;
-		RxData[3]=canBus->Register->MailBoxFIFORx[0].RDHxR;
-		RxData[4]=(canBus->Register->MailBoxFIFORx[0].RDTxR&0xFF00)>>CAN_RDT0R_FMI_Pos;//Filter Match Index
+			if(!(canBus->Register->MailBoxFIFORx[0].RIxR && CAN_RI0R_RTR)){//Data frame
+				RxData[2]=canBus->Register->MailBoxFIFORx[0].RDLxR;
+				RxData[3]=canBus->Register->MailBoxFIFORx[0].RDHxR;
+				RxData[4]=(canBus->Register->MailBoxFIFORx[0].RDTxR&0xFF00)>>CAN_RDT0R_FMI_Pos;//Filter Match Index
+			}
+			else{
+				RxData[2]= (canBus->Register->MailBoxFIFORx[0].RDTxR&0xFF00)>>CAN_RDT0R_FMI_Pos;//Filter Match Index
+			}
+		}
+
+		SET_BIT(canBus->Register->RF0R, CAN_RF0R_RFOM0);//Release FIFO output
 	}
-	else{
-		RxData[2]= (canBus->Register->MailBoxFIFORx[0].RDTxR&0xFF00)>>CAN_RDT0R_FMI_Pos;//Filter Match Index
-	}
-
-	SET_BIT(canBus->Register->RF0R, CAN_RF0R_RFOM0);//Release FIFO output
-
 	return canBus->Register->RF0R & CAN_RF0R_FMP0;//Return status
 
 }
 
 uint8_t CANx_RxFIFO1(CAN_Handler * canBus, uint32_t * RxData){
-	if(canBus->Register->MailBoxFIFORx[1].RIxR && CAN_RI1R_IDE){//Extended Identifier
-		RxData[0] = (canBus->Register->MailBoxFIFORx[1].RIxR & 0xFFFFFFF8)>>CAN_RI1R_EXID_Pos;
-	}
-	else{//Standard Identifier
-		RxData[0] = (canBus->Register->MailBoxFIFORx[1].RIxR & 0xFFE00000)>>CAN_RI1R_STID_Pos;
-	}
 
-	RxData[1]=canBus->Register->MailBoxFIFORx[1].RDTxR & 0xF;//Data Length Code
+	if(canBus->Register->RF1R && CAN_RF0R_FMP0){
+		if(CANx_GetLEC(canBus)!=CAN_ESR_LEC){//Revisamos si el último mensaje recibido tuvo algún error
+			if(canBus->Register->MailBoxFIFORx[1].RIxR && CAN_RI1R_IDE){//Extended Identifier
+				RxData[0] = (canBus->Register->MailBoxFIFORx[1].RIxR & 0xFFFFFFF8)>>CAN_RI1R_EXID_Pos;
+			}
+			else{//Standard Identifier
+				RxData[0] = (canBus->Register->MailBoxFIFORx[1].RIxR & 0xFFE00000)>>CAN_RI1R_STID_Pos;
+			}
 
-	if(!(canBus->Register->MailBoxFIFORx[1].RIxR && CAN_RI1R_RTR)){//Data frame
-		RxData[2]=canBus->Register->MailBoxFIFORx[1].RDLxR;
-		RxData[3]=canBus->Register->MailBoxFIFORx[1].RDHxR;
-		RxData[4]=(canBus->Register->MailBoxFIFORx[1].RDTxR&0xFF00)>>CAN_RDT1R_FMI_Pos;//Filter Match Index
+			RxData[1]=canBus->Register->MailBoxFIFORx[1].RDTxR & 0xF;//Data Length Code
+
+			if(!(canBus->Register->MailBoxFIFORx[1].RIxR && CAN_RI1R_RTR)){//Data frame
+				RxData[2]=canBus->Register->MailBoxFIFORx[1].RDLxR;
+				RxData[3]=canBus->Register->MailBoxFIFORx[1].RDHxR;
+				RxData[4]=(canBus->Register->MailBoxFIFORx[1].RDTxR&0xFF00)>>CAN_RDT1R_FMI_Pos;//Filter Match Index
+			}
+			else{
+				RxData[2]= (canBus->Register->MailBoxFIFORx[1].RDTxR&0xFF00)>>CAN_RDT1R_FMI_Pos;//Filter Match Index
+			}
+		}
+		SET_BIT(canBus->Register->RF1R, CAN_RF1R_RFOM1);//Release FIFO output
 	}
-	else{
-		RxData[2]= (canBus->Register->MailBoxFIFORx[1].RDTxR&0xFF00)>>CAN_RDT1R_FMI_Pos;//Filter Match Index
-	}
-
-	SET_BIT(canBus->Register->RF1R, CAN_RF1R_RFOM1);//Release FIFO output
-
-	return canBus->Register->RF0R & CAN_RF1R_FMP1;//Return status
+	return canBus->Register->RF1R & CAN_RF1R_FMP1;//Return status
 }
 
 void CANx_BusOffRecovery(CAN_Handler * canBus){//Bit TEC>255
@@ -405,6 +414,14 @@ void CANx_ResetInt(CAN_Handler * canBus, uint32_t bitReg){
 
 uint32_t CANx_GetError(CAN_Handler * canBus, uint32_t bitReg){
 	return canBus->Register->ESR & bitReg;
+}
+
+uint8_t CANx_GetLEC(CAN_Handler * canBus){
+	return CANx_GetError(canBus, CAN_ESR_LEC);
+}
+
+void CANx_SetLEC(CAN_Handler * canBus){
+	canBus->Register->ESR |= CAN_ESR_LEC;
 }
 
 bool CANx_TxSuccess(volatile uint32_t *SR, uint8_t indexMailBox){
