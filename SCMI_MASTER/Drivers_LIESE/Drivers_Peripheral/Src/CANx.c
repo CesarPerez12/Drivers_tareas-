@@ -72,18 +72,21 @@ void CANx_Init(CAN_Handler *canBus, CAN_FilterTypeDef *fltr, CAN_BitTimingTypeDe
 void CANx_SetCfgFilter(CAN_Handler * canBus, CAN_FilterTypeDef * fltr){
 	//SET_BIT(canBus->Register->FMR, CAN_FMR_FINIT);//Initialization mode for the filters.
 	CLEAR_BIT(canBus->Register->FA1R, (1UL<<fltr->indexFltr));//Desactive Filter
-	SET_BIT(canBus->Register->FS1R, (fltr->bitscale&1UL)<<fltr->indexFltr);//Dual 16 bits scale or Single 32 bits scale, for all 28 filters
+	CLEAR_BIT(canBus->Register->FiR[fltr->indexFltr].FiR1, 0xFFFFFFFF);//CLEAR ID
+	CLEAR_BIT(canBus->Register->FiR[fltr->indexFltr].FiR2, 0xFFFFFFFF);//CLEAR MASK
 
-	if(((canBus->Register->FS1R)&&((fltr->bitscale&1UL)<<fltr->indexFltr))){//32 bits scale
+	if(fltr->bitscale&1UL){//32 bits scale
+		SET_BIT(canBus->Register->FS1R, (fltr->bitscale&1UL)<<fltr->indexFltr);//Dual 16 bits scale or Single 32 bits scale, for all 28 filters
 		SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR1, ((fltr->ID_L&0xFFFF)|((fltr->ID_H&0xFFFF)<<16)));//ID for 32 bits scale
 		SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR2, ((fltr->Mask_L&0xFFFF)|((fltr->Mask_H&0xFFFF)<<16)));//Mask for 32 bits scale, 0->Not compare, 1->Compare
 	}
 	else{//Dual 16 bits scale: ID[15:0], MASK[16:31]
+		CLEAR_BIT(canBus->Register->FS1R, (fltr->bitscale&1UL)<<fltr->indexFltr);//Dual 16 bits scale or Single 32 bits scale, for all 28 filters
 		SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR1, 0xFFFF&fltr->ID_L);//ID for 16 bits
-		SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR1, 0xFFFF&fltr->Mask_L);//Mask for 16 bits scale
+		SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR1, (0xFFFF&fltr->Mask_L)<<16);//Mask for 16 bits scale
 
 		SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR2,  0xFFFF&fltr->ID_H);//ID for 16 bits scale
-		SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR2,  0xFFFF&fltr->Mask_H);//Mask for 16 bits scale, 0->Not compare, 1->Compare
+		SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR2,  (0xFFFF&fltr->Mask_H)<<16);//Mask for 16 bits scale, 0->Not compare, 1->Compare
 	}
 
 	SET_BIT(canBus->Register->FM1R, (fltr->modeFltr&1UL)<<fltr->indexFltr);//Filter modes. 0: Two 32-bit registers of filter bank x are in Identifier Mask mode.
@@ -99,17 +102,17 @@ void CANx_CfgFilters(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, bool dual_m
 
 	SET_BIT(canBus->Register->FMR, CAN_FMR_FINIT);//Initialization mode for the filters.
 
-	for (i = 0; i < nofltrArray; ++i) {
-		CANx_SetCfgFilter(canBus, &fltr[i]);//Recorremos el arreglo de estructuras
-	}
-
 	if(!dual_mode){//Un solo módulo CAN para usar
 
-		SET_BIT(canBus->Register->FMR, (28<<CAN_FMR_CAN2SB_Pos));//All 28 filters managed by one can
+		CLEAR_BIT(canBus->Register->FMR, (0X3F<<CAN_FMR_CAN2SB_Pos));//All 28 filters managed by one can
 
 	}
 	else{
 		SET_BIT(canBus->Register->FMR, ((28-nofltrCANslave)<<CAN_FMR_CAN2SB_Pos));//filters managed by can slave
+	}
+
+	for (i = 0; i < nofltrArray; ++i) {
+		CANx_SetCfgFilter(canBus, &fltr[i]);//Recorremos el arreglo de estructuras
 	}
 
 	CLEAR_BIT(canBus->Register->FMR, CAN_FMR_FINIT);//Initialization mode off
@@ -123,8 +126,8 @@ void CANx_CfgFilters(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, bool dual_m
 bool CANx_BitTiming(CAN_Handler * canBus, CAN_BitTimingTypeDef *tq){
 
 	bool flag=true;
-	uint8_t nt1t2= tq->ntq - 1; //Define total time for tSeg1+tSeg2
-	uint8_t nt1, nt2; //Segment 1 and segment 2. Maximum value Segment 2: Value programmable (8-1)=7
+	uint8_t nt1t2= tq->ntq - 1; //Define total time for tSeg1+tSeg2, don't consider Sync time
+	uint8_t nt1=0, nt2=0; //Segment 1 and segment 2. Maximum value Segment 2: Value programmable (8-1)=7
 	uint16_t fq ;//fq=1/tq -> tq = tbits/ntq
 	uint16_t BRP ;//(ClockFreq/fq) - 1
 
@@ -145,6 +148,7 @@ bool CANx_BitTiming(CAN_Handler * canBus, CAN_BitTimingTypeDef *tq){
 	else{
 		flag=true;
 		nt2 = nt1t2 / 2;
+		nt1 = nt2;
 
 		if(nt2>=8){
 			nt2 = 8;//Máximo valor Segmento 2
@@ -194,6 +198,11 @@ bool CANx_BitTiming(CAN_Handler * canBus, CAN_BitTimingTypeDef *tq){
  * indexMailBox: Number of Mailbox Tx to use
  */
 void CANx_TxData(CAN_Handler * canBus, uint32_t ID, uint32_t DataL, uint32_t DataH, uint8_t DLC, bool ExID, uint8_t indexMailBox){
+
+	CLEAR_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR, 0xFFFFFFFF);//CLEAR
+	CLEAR_BIT(canBus->Register->MailBoxTx[indexMailBox].TDTxR, 0xFFFF000F);//CLEAR
+	CLEAR_BIT(canBus->Register->MailBoxTx[indexMailBox].TDLxR , 0xFFFFFFFF);//CLEAR
+	CLEAR_BIT(canBus->Register->MailBoxTx[indexMailBox].TDHxR , 0xFFFFFFFF);//CLEAR
 
 	if(ExID){
 		SET_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR, CAN_TI0R_IDE);//Extended identifier.

@@ -3769,8 +3769,8 @@ extern CAN_Handler *can1, *can2;
 #define CAN_FM1R_MaskMode              0UL//Identifier Mask Mode
 #define CAN_FM1R_ListMode              1UL//Identifier List Mode
 
-#define CAN_FS1R_S32                   0UL//Dual 16 bit scale
-#define CAN_FS1R_D16                   1UL//Single 32 bit scale
+#define CAN_FS1R_D16                   0UL//Dual 16 bit scale
+#define CAN_FS1R_S32                   1UL//Single 32 bit scale
 
 #define CAN_FFA1R_FIFO0                0UL//Assigned to FIFO 0
 #define CAN_FFA1R_FIFO1                1UL//Assigned to FIFO 1

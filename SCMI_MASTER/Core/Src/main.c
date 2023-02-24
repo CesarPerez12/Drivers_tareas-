@@ -25,6 +25,8 @@
 #include "CANx.h"
 
 void CANx_SetParFLTR(CAN_FilterTypeDef * FLTR, uint8_t index, uint8_t scale, uint16_t IDL, uint16_t IDH, uint16_t MaskL, uint32_t MaskH, uint8_t mode, uint8_t FIFO );
+uint32_t dataRx[5];
+
 
 int main(void)
 {
@@ -37,21 +39,27 @@ int main(void)
 	//preAPB1 -> Not divided, preAPB2 -> not divided, APB1 = 40MHZ, APB2=40MHz.
 	//NVIC_SetCFGR(CAN1_Rx0_IRQ, 3);
 
+	CANx_GPIO(GPIOB,8);//CAN RX
+	CANx_GPIO(GPIOB,9);//CAN TX
+
 	CANx_SetParFLTR(&FLTR[0], 0, CAN_FS1R_S32, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, CAN_FM1R_MaskMode, CAN_FFA1R_FIFO0);
 	//0->Filter 0; CAN_FS1R_S32->32 bits scale; 0xFFFF->IDL,  0xFFFF->IDH;  0xFFFF->MaskL,  0xFFFF->MaskH;
 	//CAN_FM1R_MaskMode-> ID in mask mode; CAN_FFA1R_FIFO0-> assigned to FIFO 0
-	CANx_SetParFLTR(&FLTR[1], 1, CAN_FS1R_S32, 1200, 1200, 0xFFFF, 0xFFFF, CAN_FM1R_MaskMode, CAN_FFA1R_FIFO1);
+	CANx_SetParFLTR(&FLTR[1], 1, CAN_FS1R_D16, 1200, 1200, 0xFFFF, 0xFFFF, CAN_FM1R_MaskMode, CAN_FFA1R_FIFO1);
 
 	//Time quanta Parameters
 	tq.ntq = 16;//16 times
 	tq.kbps = 1000;//1Mbps
 	tq.SJW = 0;//SJW=1
 
-	CANx_Init(&can, FLTR, &tq, false, 0, 3);//can struct; array of sturct FLTR; tq struct; false->No dual mode; 0->Number of filter for CAN2;
+	CANx_Init(&can, FLTR, &tq, false, 0, 2);//can struct; array of sturct FLTR; tq struct; false->No dual mode; 0->Number of filter for CAN2;
 	//3->Number of filters to configure
 
 	CANx_TxData(&can, 1200, 0x1111, 0x1111, 8, false, 0);
 	CANx_TxData(&can, 0xFFFFFFFF, 0x2222, 0x2222, 8, false, 1);
+	//CANx_RxFIFO0(&can, dataRx);
+	//CANx_RxFIFO1(&can, dataRx);
+
 
     /* Loop forever */
 	for(;;);
