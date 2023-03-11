@@ -8,6 +8,8 @@
 #include "RCC.h"
 #include "SYSCFG.h"
 #include "embeddedFLASH.h"
+#include "MacroFunctions.h"
+#include "GPIOx.h"
  uint8_t currentSYSCLK=0;
  uint8_t currentAHB1CLK=0;
 /*RCC es 16MHz de manera predeterminada
@@ -47,6 +49,7 @@ bool SystClock_Init(uint8_t sourceSYS, uint8_t sourcePLL, uint8_t SYSCLK, uint8_
 				SystCLK_CalculatePLLCFGR(sourceSYS, HSICLK, 100*SYSCLK, preAHB1, preAPB1, preAPB2, 8);//Configura e inicializa
 			}
 			else{//Source PLL -> HSE
+				RCC_EnPort(GPIOH);
 				SystCLK_CalculatePLLCFGR(sourceSYS, HSECLK, 100*SYSCLK, preAHB1, preAPB1, preAPB2, 1);//Configura e inicializa
 			}
 		}

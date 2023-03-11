@@ -29,7 +29,7 @@ extern uint32_t *buffRx;
 #define CAN_BASE    0x40006400
 
 typedef struct{
-	uint16_t  kbps;
+	uint32_t  kbps;
 	uint8_t   ntq;
 	uint8_t   SJW;
 }CAN_BitTimingTypeDef;
@@ -43,7 +43,16 @@ typedef struct{
 	uint16_t  Mask_H;
 	uint32_t  modeFltr;
 	uint8_t   FIFO;
+	bool      IDE;
 }CAN_FilterTypeDef;
+
+typedef struct{
+	uint8_t   indexFltr;
+	uint16_t  ID_L;
+	uint16_t  ID_H;
+	uint16_t  Mask_L;
+	uint16_t  Mask_H;
+}CAN_DualFilterID_n_MaskTypeDef;
 
 //x=0,1,2.
 
@@ -3775,10 +3784,12 @@ extern CAN_Handler *can1, *can2;
 #define CAN_FFA1R_FIFO0                0UL//Assigned to FIFO 0
 #define CAN_FFA1R_FIFO1                1UL//Assigned to FIFO 1
 
+#define GPIO_AFR_AFSEL_CAN             9UL
+
 
 void CANx_GPIO(GPIO_TypeDef *Port_, uint8_t Pin_);
-void CANx_Init(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, CAN_BitTimingTypeDef *tq, bool dual_mode, uint8_t nofltrCANslave,  uint8_t nofltrArray);
-void CANx_CfgFilters(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, bool dual_mode, uint8_t nofltrCANslave ,uint8_t nofltrArray);
+void CANx_Init(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, CAN_DualFilterID_n_MaskTypeDef * fltr_ID2_Mask2, CAN_BitTimingTypeDef *tq, bool dual_mode, uint8_t nofltrCANslave,  uint8_t nofltrArray);
+void CANx_CfgFilters(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, CAN_DualFilterID_n_MaskTypeDef * fltr_ID2_Mask2, bool dual_mode, uint8_t nofltrCANslave ,uint8_t nofltrArray);
 bool CANx_BitTiming(CAN_Handler * canBus, CAN_BitTimingTypeDef *tq);
 void CANx_TxData(CAN_Handler * canBus, uint32_t ID, uint32_t DataL, uint32_t DataH, uint8_t DLC, bool ExID, uint8_t indexMailBox);
 void CANx_TxRemote(CAN_Handler * canBus, uint32_t ID, bool ExID, uint8_t indexMailBox);

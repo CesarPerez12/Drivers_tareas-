@@ -15,7 +15,7 @@ CAN_Handler *can1, *can2;
 
 void CANx_GPIO(GPIO_TypeDef *Port_, uint8_t Pin_){
 	RCC_EnPort(Port_);
-	GPIOx_InitAF(Port_, Pin_, GPIO_OTYPER_OD, GPIO_OSPEEDR_HS, GPIO_MODER_MODE_AF);
+	GPIOx_InitAF(Port_, Pin_, GPIO_OTYPER_PP, GPIO_OSPEEDR_HS, GPIO_AFR_AFSEL_CAN);
 }
 
 /*
@@ -23,7 +23,7 @@ void CANx_GPIO(GPIO_TypeDef *Port_, uint8_t Pin_){
  * nofltrCANslave: Number of filter for CAN2 as slave
  * nofltrArray: Number of filters to configure
  */
-void CANx_Init(CAN_Handler *canBus, CAN_FilterTypeDef *fltr, CAN_BitTimingTypeDef *tq, bool dual_mode, uint8_t nofltrCANslave,  uint8_t nofltrArray){
+void CANx_Init(CAN_Handler *canBus, CAN_FilterTypeDef *fltr, CAN_DualFilterID_n_MaskTypeDef * fltr_ID2_Mask2, CAN_BitTimingTypeDef *tq, bool dual_mode, uint8_t nofltrCANslave,  uint8_t nofltrArray){
 
 	if(dual_mode){
 		SET_BIT(RCC_APB1ENR , RCC_APB1ENR_CAN1EN | RCC_APB1ENR_CAN2EN);
@@ -38,13 +38,20 @@ void CANx_Init(CAN_Handler *canBus, CAN_FilterTypeDef *fltr, CAN_BitTimingTypeDe
 		}
 	}
 
+	SET_BIT(canBus->Register->MCR, CAN_MCR_RESET);//Reset
+	CANx_WaitResetFlag(&(canBus->Register->MSR), CAN_MCR_RESET);//Wait for confirmation
+
 	SET_BIT(canBus->Register->MCR, CAN_MCR_INRQ);//Initialization request
 	CANx_WaitSetFlag(&(canBus->Register->MSR), CAN_MSR_INAK);//Wait for confirmation
+
+	CLEAR_BIT(canBus->Register->MCR, CAN_MCR_SLEEP);//SLEEP MODE OFF
+	CANx_WaitResetFlag(&(canBus->Register->MSR), CAN_MSR_SLAK);
 
 	CLEAR_BIT(canBus->Register->MCR, CAN_MCR_TXFP);//Priority driven by the identifier of the message
 	CLEAR_BIT(canBus->Register->MCR, CAN_MCR_RFLM);//Receive FIFO not locked on overrun.
 	CLEAR_BIT(canBus->Register->MCR, CAN_MCR_NART);//The CAN hardware will automatically retransmit the message until it has been
 	//successfully transmitted according to the CAN standard.
+	//Modificar, si no se desea retransmitir NART=1.
 	CLEAR_BIT(canBus->Register->MCR, CAN_MCR_AWUM);//The Sleep mode is left on software request
 	CLEAR_BIT(canBus->Register->MCR, CAN_MCR_ABOM);//The Bus-Off state is left on software request,
 	CLEAR_BIT(canBus->Register->MCR, CAN_MCR_TTCM);//Time Triggered Communication mode disabled.
@@ -53,11 +60,10 @@ void CANx_Init(CAN_Handler *canBus, CAN_FilterTypeDef *fltr, CAN_BitTimingTypeDe
 
 	CANx_BitTiming(canBus, tq);
 
-	CANx_CfgFilters(canBus, fltr, dual_mode, nofltrCANslave, nofltrArray);
+	CANx_CfgFilters(canBus, fltr, fltr_ID2_Mask2, dual_mode, nofltrCANslave, nofltrArray);
 
 	CLEAR_BIT(canBus->Register->MCR, CAN_MCR_INRQ);//Initialization request off
 	CANx_WaitResetFlag(&(canBus->Register->MSR), CAN_MSR_INAK);
-
 
 }
 
@@ -69,7 +75,7 @@ void CANx_Init(CAN_Handler *canBus, CAN_FilterTypeDef *fltr, CAN_BitTimingTypeDe
  * modeFltr: Select between Identifier Mask Mode or Identifier List Mode
  * FIFO: Select in which FIFO will be stored data when filter achieves
  */
-void CANx_SetCfgFilter(CAN_Handler * canBus, CAN_FilterTypeDef * fltr){
+void CANx_SetCfgFilter(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, CAN_DualFilterID_n_MaskTypeDef * fltr_ID2_Mask2){
 	//SET_BIT(canBus->Register->FMR, CAN_FMR_FINIT);//Initialization mode for the filters.
 	CLEAR_BIT(canBus->Register->FA1R, (1UL<<fltr->indexFltr));//Desactive Filter
 	CLEAR_BIT(canBus->Register->FiR[fltr->indexFltr].FiR1, 0xFFFFFFFF);//CLEAR ID
@@ -77,16 +83,37 @@ void CANx_SetCfgFilter(CAN_Handler * canBus, CAN_FilterTypeDef * fltr){
 
 	if(fltr->bitscale&1UL){//32 bits scale
 		SET_BIT(canBus->Register->FS1R, (fltr->bitscale&1UL)<<fltr->indexFltr);//Dual 16 bits scale or Single 32 bits scale, for all 28 filters
-		SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR1, ((fltr->ID_L&0xFFFF)|((fltr->ID_H&0xFFFF)<<16)));//ID for 32 bits scale
-		SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR2, ((fltr->Mask_L&0xFFFF)|((fltr->Mask_H&0xFFFF)<<16)));//Mask for 32 bits scale, 0->Not compare, 1->Compare
+		if(fltr->IDE){
+			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR1, (((fltr->ID_L&0xFFFF)<<CAN_F0R1_FB3_Pos)|(((fltr->ID_H&0x1FFF)<<16)<<CAN_F0R1_FB3_Pos)));//Extended ID for 32 bits scale
+			//IDE, RTR?
+			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR2, (((fltr->Mask_L&0xFFFF)<<CAN_F0R1_FB3_Pos)|(((fltr->Mask_H&0x1FFF)<<16)<<CAN_F0R1_FB3_Pos)));//Mask for 32 bits scale, 0->Not compare, 1->Compare
+			//IDE, RTR?
+		}
+		else{
+			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR1, ((fltr->ID_L&0x7FF)<<CAN_F0R1_FB21_Pos));//Standard ID for 32 bits scale
+			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR2, ((fltr->Mask_L&0x7FF)<<CAN_F0R1_FB21_Pos));//Mask for 32 bits scale, 0->Not compare, 1->Compare
+		}
 	}
 	else{//Dual 16 bits scale: ID[15:0], MASK[16:31]
 		CLEAR_BIT(canBus->Register->FS1R, (fltr->bitscale&1UL)<<fltr->indexFltr);//Dual 16 bits scale or Single 32 bits scale, for all 28 filters
-		SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR1, 0xFFFF&fltr->ID_L);//ID for 16 bits
-		SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR1, (0xFFFF&fltr->Mask_L)<<16);//Mask for 16 bits scale
 
-		SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR2,  0xFFFF&fltr->ID_H);//ID for 16 bits scale
-		SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR2,  (0xFFFF&fltr->Mask_H)<<16);//Mask for 16 bits scale, 0->Not compare, 1->Compare
+		if(fltr->IDE){
+			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR1, ((0x7FF&fltr->ID_L)<<5)|((0x3&fltr->ID_H)<<1)|(0x8000&fltr->ID_L));//Extended ID for 16 bits
+			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR1, (((0x7FF&fltr->Mask_L)<<16)<<5)|(((0x3&fltr->Mask_H)<<16)<<1)|((0x8000&fltr->Mask_L)<<16));//Mask for 16 bits scale
+
+			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR2, ((0x7FF&fltr_ID2_Mask2->ID_L)<<5)|((0x3&fltr_ID2_Mask2->ID_H)<<1)|(0x8000&fltr_ID2_Mask2->ID_L));//Extended ID for 16 bits
+			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR2, (((0x7FF&fltr_ID2_Mask2->Mask_L)<<16)<<5)|(((0x3&fltr_ID2_Mask2->Mask_H)<<16)<<1)|((0x8000&fltr->Mask_L)<<16));//Mask for 16 bits scale
+			//IDE, RTR?
+		}
+		else{
+
+			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR1, ((0x7FF&fltr->ID_L)<<5));//Standard ID for 16 bits
+			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR1, (((0x7FF&fltr->Mask_L)<<16)<<5));//Mask for 16 bits scale
+
+			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR2,  ((0x7FF&fltr_ID2_Mask2->ID_L)<<5));//Standard ID for 16 bits scale
+			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR2,  (((0x7FF&fltr_ID2_Mask2->Mask_L)<<16)<<5));//Mask for 16 bits scale, 0->Not compare, 1->Compare
+			//IDE, RTR?
+		}
 	}
 
 	SET_BIT(canBus->Register->FM1R, (fltr->modeFltr&1UL)<<fltr->indexFltr);//Filter modes. 0: Two 32-bit registers of filter bank x are in Identifier Mask mode.
@@ -96,15 +123,15 @@ void CANx_SetCfgFilter(CAN_Handler * canBus, CAN_FilterTypeDef * fltr){
 	//CLEAR_BIT(canBus->Register->FMR, CAN_FMR_FINIT);//Initialization mode off
 }
 
-void CANx_CfgFilters(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, bool dual_mode, uint8_t nofltrCANslave,  uint8_t nofltrArray){
+void CANx_CfgFilters(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, CAN_DualFilterID_n_MaskTypeDef * fltr_ID2_Mask2, bool dual_mode, uint8_t nofltrCANslave,  uint8_t nofltrArray){
 
-	uint8_t i=0;
+	uint8_t i=0, aux=0;
 
 	SET_BIT(canBus->Register->FMR, CAN_FMR_FINIT);//Initialization mode for the filters.
 
 	if(!dual_mode){//Un solo módulo CAN para usar
 
-		CLEAR_BIT(canBus->Register->FMR, (0X3F<<CAN_FMR_CAN2SB_Pos));//All 28 filters managed by one can
+		CLEAR_BIT(canBus->Register->FMR, (CAN_FMR_CAN2SB));//All 28 filters managed by one can
 
 	}
 	else{
@@ -112,7 +139,10 @@ void CANx_CfgFilters(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, bool dual_m
 	}
 
 	for (i = 0; i < nofltrArray; ++i) {
-		CANx_SetCfgFilter(canBus, &fltr[i]);//Recorremos el arreglo de estructuras
+		CANx_SetCfgFilter(canBus, &fltr[i], &fltr_ID2_Mask2[aux]);//Recorremos el arreglo de estructuras
+		if(fltr->indexFltr==fltr_ID2_Mask2->indexFltr){
+			aux++;
+		}
 	}
 
 	CLEAR_BIT(canBus->Register->FMR, CAN_FMR_FINIT);//Initialization mode off
@@ -126,21 +156,46 @@ void CANx_CfgFilters(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, bool dual_m
 bool CANx_BitTiming(CAN_Handler * canBus, CAN_BitTimingTypeDef *tq){
 
 	bool flag=true;
-	uint8_t nt1t2= tq->ntq - 1; //Define total time for tSeg1+tSeg2, don't consider Sync time
+	uint8_t nt1t2=0; //Define total time for tSeg1+tSeg2, don't consider Sync time
 	uint8_t nt1=0, nt2=0; //Segment 1 and segment 2. Maximum value Segment 2: Value programmable (8-1)=7
-	uint16_t fq ;//fq=1/tq -> tq = tbits/ntq
+	uint32_t fq ;//fq=1/tq -> tq = tbits/ntq
 	uint16_t BRP ;//(ClockFreq/fq) - 1
 
 	if(tq->ntq > 25){//Supera el máximo número de tiempo de cuantización
 		tq->ntq = 25; //Colocamos el máximo valor por defecto
 	}
 
-	if(tq->kbps>1000){//Máxima tasa de transferencia 1Mbps CAN 2.0
-		tq->kbps = 1000; //1Mbps
+	if(tq->kbps>1000000){//Máxima tasa de transferencia 1Mbps CAN 2.0
+		tq->kbps = 1000000; //1Mbps
 	}
 
 	fq = tq->kbps * tq->ntq;//Calculando frecuencia del tiempo cuántico
-	BRP = ((currentAHB1CLK*1000) / (fq)) - 1;//Baud rate prescaler
+	BRP = ((currentAHB1CLK*1000000) / (fq));//Baud rate prescaler
+
+	fq = ((currentAHB1CLK*1000000)/BRP) / (tq->ntq);//Rehusamos variable para calcular el tiempo total de 1 bit
+
+	while((fq>(tq->kbps)||(fq!=tq->kbps))&&(BRP<=1023)){
+		(tq->ntq)++;//Incrementamos el tiempo cuántico
+		fq = ((currentAHB1CLK*1000000)/BRP) / (tq->ntq);//Rehusamos variable para calcular el tiempo total de 1 bit
+		if(tq->ntq > 25){//Supera el máximo número de tiempo de cuantización
+			tq->ntq = 1; //Colocamos el máximo valor por defecto
+			BRP++;
+		}
+	}
+
+	nt1t2 = tq->ntq - 1;
+
+	if(fq!=tq->kbps){//Si no hay coincidencia se busca un valor cercano
+		BRP = ((currentAHB1CLK*1000000) / (fq));//Baud rate prescaler
+		while(fq>(tq->kbps)){
+			(tq->ntq)++;//Incrementamos el tiempo cuántico
+			fq = ((currentAHB1CLK*1000000)/BRP) / (tq->ntq);//Rehusamos variable para calcular el tiempo total de 1 bit
+			if(tq->ntq > 25){//Supera el máximo número de tiempo de cuantización
+				tq->ntq = 1; //Colocamos el máximo valor por defecto
+				BRP++;
+			}
+		}
+	}
 
 	if((BRP<0)||(BRP>1023)){
 		flag=false;//Can't preformance bit rate with Clock frequency
@@ -148,22 +203,23 @@ bool CANx_BitTiming(CAN_Handler * canBus, CAN_BitTimingTypeDef *tq){
 	else{
 		flag=true;
 		nt2 = nt1t2 / 2;
-		nt1 = nt2;
+		//nt1 = nt2;
 
 		if(nt2>=8){
 			nt2 = 8;//Máximo valor Segmento 2
 			nt1 = nt1t2 - nt2;//Valor Segmento 1
 		}
 		else{
-			nt1t2 = 2; //Rehusamos variables
-			nt2-=nt1t2;//Decrementamos el valor
-			nt1+=nt1t2;//Incrementamos el valor
+			nt1 = 2; //Rehusamos variables
+			nt2-=nt1;//Decrementamos el valor
+			nt1 =nt1t2 - nt2;//Calculamos el valor
 
-			while((nt2<1)||(nt2>8)||(nt1t2==0)){
-				nt1t2--;
-				nt2-=nt1t2;
-				nt1+=nt1t2;
+			while((nt2<1)||(nt2>8)||(nt1==0)){
+				nt1--;
+				nt2-=nt1;
 			}
+
+			nt1 =nt1t2 - nt2; //Calculamos el valor
 
 			if((nt2<1)||(nt2>8)){//Verificamos coincidencia
 				nt2 = 1;//Mínimo valor Segmento 2
@@ -172,16 +228,21 @@ bool CANx_BitTiming(CAN_Handler * canBus, CAN_BitTimingTypeDef *tq){
 
 		}
 
-		SET_BIT(canBus->Register->BTR , (BRP<<CAN_BTR_BRP_Pos));//Baud rate prescaler
-		SET_BIT(canBus->Register->BTR , ((nt1-1)<<CAN_BTR_TS1_Pos));//number of time quanta for tS1
-		SET_BIT(canBus->Register->BTR , ((nt2-1)<<CAN_BTR_TS2_Pos));//number of time quanta for tS2
-
 		if(tq->SJW){//Resynchronization
 			SET_BIT(canBus->Register->BTR , (tq->SJW<<CAN_BTR_SJW_Pos));
 		}
 		else{
 			CLEAR_BIT(canBus->Register->BTR , (3<<CAN_BTR_SJW_Pos));
 		}
+
+		CLEAR_BIT(canBus->Register->BTR , (CAN_BTR_BRP));
+		CLEAR_BIT(canBus->Register->BTR , (CAN_BTR_TS1));
+		CLEAR_BIT(canBus->Register->BTR , (CAN_BTR_TS2));
+
+		SET_BIT(canBus->Register->BTR , ((BRP-1)<<CAN_BTR_BRP_Pos));//Baud rate prescaler
+		SET_BIT(canBus->Register->BTR , ((nt1-1)<<CAN_BTR_TS1_Pos));//number of time quanta for tS1
+		SET_BIT(canBus->Register->BTR , ((nt2-1)<<CAN_BTR_TS2_Pos));//number of time quanta for tS2
+
 	}
 
 	return flag;
@@ -200,7 +261,7 @@ bool CANx_BitTiming(CAN_Handler * canBus, CAN_BitTimingTypeDef *tq){
 void CANx_TxData(CAN_Handler * canBus, uint32_t ID, uint32_t DataL, uint32_t DataH, uint8_t DLC, bool ExID, uint8_t indexMailBox){
 
 	CLEAR_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR, 0xFFFFFFFF);//CLEAR
-	CLEAR_BIT(canBus->Register->MailBoxTx[indexMailBox].TDTxR, 0xFFFF000F);//CLEAR
+	CLEAR_BIT(canBus->Register->MailBoxTx[indexMailBox].TDTxR, 0xFFFFFFFF);//CLEAR
 	CLEAR_BIT(canBus->Register->MailBoxTx[indexMailBox].TDLxR , 0xFFFFFFFF);//CLEAR
 	CLEAR_BIT(canBus->Register->MailBoxTx[indexMailBox].TDHxR , 0xFFFFFFFF);//CLEAR
 
@@ -226,6 +287,11 @@ void CANx_TxData(CAN_Handler * canBus, uint32_t ID, uint32_t DataL, uint32_t Dat
 //Trama Remota
 void CANx_TxRemote(CAN_Handler * canBus, uint32_t ID, bool ExID, uint8_t indexMailBox){
 
+	CLEAR_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR, 0xFFFFFFFF);//CLEAR
+	CLEAR_BIT(canBus->Register->MailBoxTx[indexMailBox].TDTxR, 0xFFFFFEFF);//CLEAR
+	CLEAR_BIT(canBus->Register->MailBoxTx[indexMailBox].TDLxR , 0xFFFFFFFF);//CLEAR
+	CLEAR_BIT(canBus->Register->MailBoxTx[indexMailBox].TDHxR , 0xFFFFFFFF);//CLEAR
+
 	if(ExID){
 		SET_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR, CAN_TI0R_IDE);//Extended identifier.
 		SET_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR, ID<<CAN_TI0R_EXID_Pos);//ID
@@ -234,9 +300,9 @@ void CANx_TxRemote(CAN_Handler * canBus, uint32_t ID, bool ExID, uint8_t indexMa
 		CLEAR_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR, CAN_TI0R_IDE);//Standard identifier.
 		SET_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR, ID<<CAN_TI0R_STID_Pos);//ID
 	}
-	SET_BIT(canBus->Register->MailBoxTx[1].TIxR, CAN_TI1R_RTR);//Remote frame
+	SET_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR, CAN_TI1R_RTR);//Remote frame
 	//SET_BIT(canBus->Register->MailBoxTx[2].TDTxR, DLC);//Data length max 8 bytes
-	SET_BIT(canBus->Register->MailBoxTx[1].TIxR , CAN_TI0R_TXRQ);//Transmission request
+	SET_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR , CAN_TI0R_TXRQ);//Transmission request
 
 	CANx_TxSuccess(&(canBus->Register->TSR), indexMailBox);
 	//Success
@@ -247,7 +313,7 @@ void CANx_TxRemote(CAN_Handler * canBus, uint32_t ID, bool ExID, uint8_t indexMa
 uint8_t CANx_RxFIFO0(CAN_Handler * canBus, uint32_t * RxData ){
 	if(canBus->Register->RF0R && CAN_RF0R_FMP0){
 		if(CANx_GetLEC(canBus)!=CAN_ESR_LEC){//Revisamos si el último mensaje recibido tuvo algún error
-			if(canBus->Register->MailBoxFIFORx[0].RIxR && CAN_RI0R_IDE){//Extended Identifier
+			if((canBus->Register->MailBoxFIFORx[0].RIxR) & CAN_RI0R_IDE){//Extended Identifier
 				RxData[0] = (canBus->Register->MailBoxFIFORx[0].RIxR & 0xFFFFFFF8)>>CAN_RI0R_EXID_Pos;
 			}
 			else{//Standard Identifier
@@ -256,7 +322,7 @@ uint8_t CANx_RxFIFO0(CAN_Handler * canBus, uint32_t * RxData ){
 
 			RxData[1]=canBus->Register->MailBoxFIFORx[0].RDTxR & 0xF;//Data Length Code
 
-			if(!(canBus->Register->MailBoxFIFORx[0].RIxR && CAN_RI0R_RTR)){//Data frame
+			if(!(canBus->Register->MailBoxFIFORx[0].RIxR & CAN_RI0R_RTR)){//Data frame
 				RxData[2]=canBus->Register->MailBoxFIFORx[0].RDLxR;
 				RxData[3]=canBus->Register->MailBoxFIFORx[0].RDHxR;
 				RxData[4]=(canBus->Register->MailBoxFIFORx[0].RDTxR&0xFF00)>>CAN_RDT0R_FMI_Pos;//Filter Match Index
@@ -274,7 +340,7 @@ uint8_t CANx_RxFIFO0(CAN_Handler * canBus, uint32_t * RxData ){
 
 uint8_t CANx_RxFIFO1(CAN_Handler * canBus, uint32_t * RxData){
 
-	if(canBus->Register->RF1R && CAN_RF0R_FMP0){
+	if(canBus->Register->RF1R & CAN_RF0R_FMP0){
 		if(CANx_GetLEC(canBus)!=CAN_ESR_LEC){//Revisamos si el último mensaje recibido tuvo algún error
 			if(canBus->Register->MailBoxFIFORx[1].RIxR && CAN_RI1R_IDE){//Extended Identifier
 				RxData[0] = (canBus->Register->MailBoxFIFORx[1].RIxR & 0xFFFFFFF8)>>CAN_RI1R_EXID_Pos;
@@ -285,7 +351,7 @@ uint8_t CANx_RxFIFO1(CAN_Handler * canBus, uint32_t * RxData){
 
 			RxData[1]=canBus->Register->MailBoxFIFORx[1].RDTxR & 0xF;//Data Length Code
 
-			if(!(canBus->Register->MailBoxFIFORx[1].RIxR && CAN_RI1R_RTR)){//Data frame
+			if(!(canBus->Register->MailBoxFIFORx[1].RIxR & CAN_RI1R_RTR)){//Data frame
 				RxData[2]=canBus->Register->MailBoxFIFORx[1].RDLxR;
 				RxData[3]=canBus->Register->MailBoxFIFORx[1].RDHxR;
 				RxData[4]=(canBus->Register->MailBoxFIFORx[1].RDTxR&0xFF00)>>CAN_RDT1R_FMI_Pos;//Filter Match Index
@@ -306,15 +372,15 @@ void CANx_BusOffRecovery(CAN_Handler * canBus){//Bit TEC>255
 }
 
 void CANx_CallBackRX0(CAN_Handler *can){
-	if(can->Register->RF0R && CAN_RF0R_FMP0){//New Message
+	if(can->Register->RF0R & CAN_RF0R_FMP0){//New Message
 		CANx_RxFIFO0(can, buffRx);//Lee el nuevo mensaje
 	}
-	else if(can->Register->RF0R && CAN_RF0R_FULL0){//FULL FIFO
+	else if(can->Register->RF0R & CAN_RF0R_FULL0){//FULL FIFO
 		while(CANx_RxFIFO0(can, buffRx)){//Lee los mensajes
 			buffRx+=32;//Cambiamos de dirección
 		}
 	}
-	else if(can->Register->RF0R && CAN_RF0R_FOVR0){//OVER FIFO
+	else if(can->Register->RF0R & CAN_RF0R_FOVR0){//OVER FIFO
 		while(CANx_RxFIFO0(can, buffRx)){//Lee los mensajes
 			buffRx+=32;//Cambiamos de dirección
 		}
@@ -322,15 +388,15 @@ void CANx_CallBackRX0(CAN_Handler *can){
 }
 
 void CANx_CallBackRX1(CAN_Handler *can){
-	if(can->Register->RF1R && CAN_RF1R_FMP1){//New Message
+	if(can->Register->RF1R & CAN_RF1R_FMP1){//New Message
 		CANx_RxFIFO1(can, buffRx);//Lee el nuevo mensaje
 	}
-	else if(can->Register->RF1R && CAN_RF1R_FULL1){//FULL FIFO
+	else if(can->Register->RF1R & CAN_RF1R_FULL1){//FULL FIFO
 		while(CANx_RxFIFO1(can, buffRx)){//Lee los mensajes
 			buffRx+=32;//Cambiamos de dirección
 		}
 	}
-	else if(can->Register->RF1R && CAN_RF1R_FOVR1){//OVER FIFO
+	else if(can->Register->RF1R & CAN_RF1R_FOVR1){//OVER FIFO
 		while(CANx_RxFIFO1(can, buffRx)){//Lee los mensajes
 			buffRx+=32;//Cambiamos de dirección
 		}
@@ -351,10 +417,10 @@ void CANx_CallBackSCE(CAN_Handler *can){
 	else if(CANx_GetError(can, CAN_ESR_LEC)){
 		errorStatus=1;//Set error status
 	}
-	else if(can->Register->MSR&&CAN_MSR_WKUI){
+	else if(can->Register->MSR&CAN_MSR_WKUI){
 		//Sleep mode
 	}
-	else if(can->Register->MSR&&CAN_MSR_SLAKI){
+	else if(can->Register->MSR&CAN_MSR_SLAKI){
 		//Wake up mode
 	}
 }
@@ -362,13 +428,13 @@ void CANx_CallBackSCE(CAN_Handler *can){
 void CAN1_TX_IRQHandler(){
 	/* CAN1 TX interrupts                                                 */
 	//Becomes Empty
-	if(CAN1->TSR && CAN_TSR_RQCP0){//Tx0 empty
+	if(CAN1->TSR & CAN_TSR_RQCP0){//Tx0 empty
 		CAN1emptyTx[0]=true;
 	}
-	else if(CAN1->TSR && CAN_TSR_RQCP1){//Tx1 empty
+	else if(CAN1->TSR & CAN_TSR_RQCP1){//Tx1 empty
 		CAN1emptyTx[1]=true;
 	}
-	else if(CAN1->TSR && CAN_TSR_RQCP2){//Tx2 empty
+	else if(CAN1->TSR & CAN_TSR_RQCP2){//Tx2 empty
 		CAN1emptyTx[2]=true;
 	}
 }
@@ -390,13 +456,13 @@ void CAN1_SCE_IRQHandler(){
 void CAN2_TX_IRQHandler(){
 	/* CAN2 TX interrupts                                                 */
 	//Becomes Empty
-	if(CAN2->TSR && CAN_TSR_RQCP0){//Tx0 empty
+	if(CAN2->TSR & CAN_TSR_RQCP0){//Tx0 empty
 		CAN2emptyTx[0]=true;
 	}
-	else if(CAN2->TSR && CAN_TSR_RQCP1){//Tx1 empty
+	else if(CAN2->TSR & CAN_TSR_RQCP1){//Tx1 empty
 		CAN2emptyTx[1]=true;
 	}
-	else if(CAN2->TSR && CAN_TSR_RQCP2){//Tx2 empty
+	else if(CAN2->TSR & CAN_TSR_RQCP2){//Tx2 empty
 		CAN2emptyTx[2]=true;
 	}
 }
@@ -436,23 +502,24 @@ void CANx_SetLEC(CAN_Handler * canBus){
 bool CANx_TxSuccess(volatile uint32_t *SR, uint8_t indexMailBox){
 	bool flag=true;
 	if(indexMailBox == 0){
-		while((!((*SR) & CAN_TSR_RQCP0))||(!((*SR) & CAN_TSR_TXOK0))||(!((*SR) & CAN_TSR_ALST0))||(!((*SR) & CAN_TSR_TERR0)));//Espera alguna bandera
+		//LEC?
+		while((!((*SR) & CAN_TSR_RQCP0))&&(!((*SR) & CAN_TSR_TXOK0))&&(!((*SR) & CAN_TSR_ALST0))&&(!((*SR) & CAN_TSR_TERR0)));//Espera alguna bandera
 
 		if(((*SR) & CAN_TSR_ALST0)||((*SR) & CAN_TSR_TERR0)){//Error de transmisión
 			flag = false;
 		}
 		else if(((*SR) & CAN_TSR_RQCP0)){
-			while(((*SR) & CAN_TSR_TXOK0));
+			while(!((*SR) & CAN_TSR_TXOK0));
 			flag=true;
 		}
 		else if(((*SR) & CAN_TSR_TXOK0)){
-			while(((*SR) & CAN_TSR_RQCP0));
+			while(!((*SR) & CAN_TSR_RQCP0));
 			flag=true;
 		}
 
 	}
 	else if(indexMailBox ==1){
-		while((!((*SR) & CAN_TSR_RQCP1))||(!((*SR) & CAN_TSR_TXOK1))||(!((*SR) & CAN_TSR_ALST1))||(!((*SR) & CAN_TSR_TERR1)));//Espera alguna bandera
+		while((!((*SR) & CAN_TSR_RQCP1))&&(!((*SR) & CAN_TSR_TXOK1))&&(!((*SR) & CAN_TSR_ALST1))&&(!((*SR) & CAN_TSR_TERR1)));//Espera alguna bandera
 
 		if(((*SR) & CAN_TSR_ALST1)||((*SR) & CAN_TSR_TERR1)){//Error de transmisión
 			flag = false;
@@ -467,7 +534,7 @@ bool CANx_TxSuccess(volatile uint32_t *SR, uint8_t indexMailBox){
 		}
 	}
 	else if(indexMailBox == 2){
-		while((!((*SR) & CAN_TSR_RQCP2))||(!((*SR) & CAN_TSR_TXOK2))||(!((*SR) & CAN_TSR_ALST2))||(!((*SR) & CAN_TSR_TERR2)));//Espera alguna bandera
+		while((!((*SR) & CAN_TSR_RQCP2))&&(!((*SR) & CAN_TSR_TXOK2))&&(!((*SR) & CAN_TSR_ALST2))&&(!((*SR) & CAN_TSR_TERR2)));//Espera alguna bandera
 
 		if(((*SR) & CAN_TSR_ALST2)||((*SR) & CAN_TSR_TERR2)){//Error de transmisión
 			flag = false;
