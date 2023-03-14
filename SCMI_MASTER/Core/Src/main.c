@@ -27,9 +27,10 @@
 void CANx_SetParFLTR(CAN_FilterTypeDef * FLTR, uint8_t index, uint8_t scale, uint16_t IDL, uint16_t IDH,
 		uint16_t MaskL, uint32_t MaskH, uint8_t mode, uint8_t FIFO, bool IDE);
 void CANx_SetParDualFLTR(CAN_DualFilterID_n_MaskTypeDef * FLTR, uint8_t index, uint16_t IDL, uint16_t IDH, uint16_t MaskL, uint16_t MaskH);
-
-uint32_t dataRx[5], i, dato=1;
-
+void CANx_SetTxHeader(CAN_TxandRxHeader_TypeDef * TxHeader, uint32_t ID, bool IDE, uint8_t DLC, uint8_t RTR, uint32_t DataH,
+		uint32_t DataL, uint8_t index);
+CAN_TxandRxHeader_TypeDef TxHeader, RxData;
+uint32_t i, dato=1;
 
 int main(void)
 {
@@ -47,9 +48,9 @@ int main(void)
 	CANx_GPIO(GPIOB,8);//CAN RX
 	CANx_GPIO(GPIOB,9);//CAN TX
 
-	CANx_SetParFLTR(&FLTR[0], 0, CAN_FS1R_S32, 0x13, 0, 0x13, 0, CAN_FM1R_MaskMode,
-			CAN_FFA1R_FIFO0, false);
-	CANx_SetParDualFLTR(&dualFLTR[0], 0, 0x1212, 0x1212, 0x1212, 0x1212);
+	CANx_SetParFLTR(&FLTR[0], 0, CAN_FS1R_S32, 0x3, 0x3, 0x3, 0x3, CAN_FM1R_MaskMode,
+			CAN_FFA1R_FIFO0, true);
+	CANx_SetParDualFLTR(&dualFLTR[0], 0, 0x1, 0x1, 0x1, 0x1);
 	//0->Filter 0; CAN_FS1R_S32->32 bits scale; 0xFFFF->IDL,  0xFFFF->IDH;  0xFFFF->MaskL,  0xFFFF->MaskH;
 	//CAN_FM1R_MaskMode-> ID in mask mode; CAN_FFA1R_FIFO0-> assigned to FIFO 0, false->Standard ID
 	//CANx_SetParFLTR(&FLTR[1], 1, CAN_FS1R_D16, 1200, 1201, 0xFFFF, 0xFFFF, CAN_FM1R_MaskMode, CAN_FFA1R_FIFO1);
@@ -62,17 +63,26 @@ int main(void)
 	CANx_Init(&can, FLTR, dualFLTR, &tq, false, 0, 1);//can struct; array of sturct FLTR; tq struct; false->No dual mode; 0->Number of filter for CAN2;
 	//3->Number of filters to configure
 
+	NVIC_SetCFGR(CAN1_Tx_IRQ, 3);
+	NVIC_SetCFGR(CAN1_Rx0_IRQ, 4);
+	NVIC_SetCFGR(CAN1_Rx1_IRQ, 5);
+	NVIC_SetCFGR(CAN1_SCE_IRQ, 6);
+
     /* Loop forever */
 	while(1){
 
 		/*Code for polling*/
-		for (i = 0; i < 100000000; ++i);// Retardo
-		CANx_TxData(&can, 0x12, dato, dato, 8, false, 0);
-		dato++;
+		//CANx_SetTxHeader(&TxHeader, 0x30003, true, 8, CAN_TIxR_Data, dato, dato, 0);
 		//for (i = 0; i < 100000000; ++i);// Retardo
-		//CANx_TxData(&can, 0x1FFFFFFF, 0x11112222, 0x11112222, 8, true, 1);
-		//CANx_RxFIFO0(&can, dataRx);
-		//CANx_RxFIFO1(&can, dataRx);
+		//CANx_TxData(&can, &TxHeader);
+		//dato++;
+		//CANx_SetTxHeader(&TxHeader, 0x10000, true, 8, CAN_TIxR_Data, dato, dato, 0);
+		for (i = 0; i < 100000000; ++i);// Retardo
+		//CANx_TxRemote(&can, &TxHeader);
+		//for (i = 0; i < 100000000; ++i);// Retardo
+		//CANx_TxData(&can, &TxHeader);
+		CANx_RxFIFO0(&can, &RxData);
+		CANx_RxFIFO1(&can, &RxData);
 
 	}
 }
@@ -113,4 +123,24 @@ void CANx_SetParDualFLTR(
 	FLTR->ID_H=IDH;
 	FLTR->Mask_L= MaskL;
 	FLTR->Mask_H= MaskH;
+}
+
+void CANx_SetTxHeader(
+		CAN_TxandRxHeader_TypeDef * TxHeader,
+		uint32_t ID,
+		bool     IDE,
+	    uint8_t  DLC,
+		uint8_t  RTR,
+		uint32_t DataH,
+		uint32_t DataL,
+		uint8_t  index)
+{
+	TxHeader->Identifier = ID;
+	TxHeader->IDE = IDE;
+	TxHeader->DLC = DLC;
+	TxHeader->RTR = RTR;
+	TxHeader->DataH = DataH;
+	TxHeader->DataL = DataL;
+	TxHeader->Index = index;
+
 }

@@ -13,18 +13,28 @@
 #include "MacroFunctions.h"
 #include "GPIOx.h"
 
-extern bool CAN1emptyTx[3], CAN2emptyTx[3];
-extern uint32_t *buffRx;
+extern bool CAN1Tx, CAN2Tx;
+extern uint8_t CANStatus;
 
-#define CAN1_Tx_IRQ         19UL
-#define CAN1_Rx0_IRQ        20UL
-#define CAN1_Tx1_IRQ        21UL
-#define CAN1_SCE_IRQ        22UL
+#define CAN1_Tx_IRQ              19UL
+#define CAN1_Rx0_IRQ             20UL
+#define CAN1_Rx1_IRQ             21UL
+#define CAN1_SCE_IRQ             22UL
 
-#define CAN2_Tx_IRQ         63UL
-#define CAN2_Rx0_IRQ        64UL
-#define CAN2_Tx1_IRQ        65UL
-#define CAN2_SCE_IRQ        66UL
+#define CAN2_Tx_IRQ              63UL
+#define CAN2_Rx0_IRQ             64UL
+#define CAN2_Rx1_IRQ             65UL
+#define CAN2_SCE_IRQ             66UL
+
+#define NVIC_CAN1Tx_ICPR0_Pos    19UL
+#define NVIC_CAN1Rx0_ICPR0_Pos   20UL
+#define NVIC_CAN1Rx1_ICPR0_Pos   21UL
+#define NVIC_CAN1SCE_ICPR0_Pos   22UL
+
+#define NVIC_CAN2Tx_ICPR1_Pos    31UL
+#define NVIC_CAN2Rx0_ICPR2_Pos    0UL
+#define NVIC_CAN2Rx1_ICPR2_Pos    1UL
+#define NVIC_CAN2SCE_ICPR2_Pos    2UL
 
 #define CAN_BASE    0x40006400
 
@@ -53,6 +63,16 @@ typedef struct{
 	uint16_t  Mask_L;
 	uint16_t  Mask_H;
 }CAN_DualFilterID_n_MaskTypeDef;
+
+typedef struct{
+	uint32_t Identifier;
+	bool     IDE;
+	uint8_t  DLC;
+	uint8_t  RTR;
+	uint32_t DataH;
+	uint32_t DataL;
+	uint8_t  Index;               //For Rx Index is for filter; For Tx Index is for Mailbox
+}CAN_TxandRxHeader_TypeDef;
 
 //x=0,1,2.
 
@@ -118,6 +138,8 @@ typedef struct{
 
 
 extern CAN_Handler *can1, *can2;
+
+extern CAN_TxandRxHeader_TypeDef *ptrRx, *ptrTx;
 
 /******************************************************************************/
 /*                                                                            */
@@ -3786,15 +3808,22 @@ extern CAN_Handler *can1, *can2;
 
 #define GPIO_AFR_AFSEL_CAN             9UL
 
+#define CAN_NORMAL                     0UL//Normal Mode operation
+
+#define CAN_TIxR_Data                  0UL//Data Frame
+#define CAN_TIxR_Remote                1UL//Remote Frame
+#define CAN_RIxR_Data                  0UL//Data Frame
+#define CAN_RIxR_Remote                1UL//Remote Frame
 
 void CANx_GPIO(GPIO_TypeDef *Port_, uint8_t Pin_);
 void CANx_Init(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, CAN_DualFilterID_n_MaskTypeDef * fltr_ID2_Mask2, CAN_BitTimingTypeDef *tq, bool dual_mode, uint8_t nofltrCANslave,  uint8_t nofltrArray);
 void CANx_CfgFilters(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, CAN_DualFilterID_n_MaskTypeDef * fltr_ID2_Mask2, bool dual_mode, uint8_t nofltrCANslave ,uint8_t nofltrArray);
 bool CANx_BitTiming(CAN_Handler * canBus, CAN_BitTimingTypeDef *tq);
-void CANx_TxData(CAN_Handler * canBus, uint32_t ID, uint32_t DataL, uint32_t DataH, uint8_t DLC, bool ExID, uint8_t indexMailBox);
-void CANx_TxRemote(CAN_Handler * canBus, uint32_t ID, bool ExID, uint8_t indexMailBox);
-uint8_t CANx_RxFIFO0(CAN_Handler * canBus, uint32_t * RxData);
-uint8_t CANx_RxFIFO1(CAN_Handler * canBus, uint32_t * RxData);
+void CANx_Tx(CAN_Handler * canBus, CAN_TxandRxHeader_TypeDef * TxHeader);
+void CANx_TxData(CAN_Handler * canBus, CAN_TxandRxHeader_TypeDef * TxHeader);
+void CANx_TxRemote(CAN_Handler * canBus, CAN_TxandRxHeader_TypeDef * TxHeader);
+uint8_t CANx_RxFIFO0(CAN_Handler * canBus, CAN_TxandRxHeader_TypeDef * RxData);
+uint8_t CANx_RxFIFO1(CAN_Handler * canBus, CAN_TxandRxHeader_TypeDef * RxData);
 void CANx_BusOffRecovery(CAN_Handler * canBus);
 void CAN1_TX_IRQHandler();
 void CAN1_RX0_IRQHandler();
@@ -3807,10 +3836,25 @@ void CAN2_SCE_IRQHandler();
 void CANx_SetInt(CAN_Handler * canBus, uint32_t bitReg);
 void CANx_ResetInt(CAN_Handler * canBus, uint32_t bitReg);
 uint32_t CANx_GetError(CAN_Handler * canBus, uint32_t bitReg);
+void CANx_EnTxInt(CAN_Handler * canBus);
+void CANx_DisTxInt(CAN_Handler * canBus);
+void CANx_EnFIFO0Ints(CAN_Handler * canBus);
+void CANx_DisFIFO0Ints(CAN_Handler * canBus);
+void CANx_EnFIFO1Ints(CAN_Handler * canBus);
+void CANx_DisFIFO1Ints(CAN_Handler * canBus);
+void CANx_EnSECInts(CAN_Handler * canBus);
+void CANx_DisSECInts(CAN_Handler * canBus);
+void CANx_EnWakeupInt(CAN_Handler * canBus);
+void CANx_DisWakeupInt(CAN_Handler * canBus);
+void CANx_EnSleepInt(CAN_Handler * canBus);
+void CANx_DisSleepInt(CAN_Handler * canBus);
 uint8_t CANx_GetLEC(CAN_Handler * canBus);
 void CANx_SetLEC(CAN_Handler * canBus);
+uint8_t CANx_GetREC(CAN_Handler * canBus);
+uint8_t CANx_GetTEC(CAN_Handler * canBus);
 bool CANx_TxSuccess(volatile uint32_t *SR, uint8_t indexMailBox);
 void CANx_WaitSetFlag(volatile uint32_t *SR, uint32_t BitReg);
 void CANx_WaitResetFlag(volatile uint32_t *SR, uint32_t BitReg);
+void CANx_SetICPR(uint8_t x);
 
 #endif /* DRIVERS_PERIPHERAL_INC_CANX_H_ */

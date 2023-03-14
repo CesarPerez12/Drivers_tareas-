@@ -7,10 +7,11 @@
 
 #include "CANx.h"
 #include "RCC.h"
+#include "NVIC.h"
 
-bool CAN1emptyTx[3], CAN2emptyTx[3];
-uint8_t errorStatus;
-uint32_t *buffRx;
+bool CAN1Tx=false, CAN2Tx=false;
+uint8_t CANStatus=0;//Para errores y estado de CAN
+CAN_TxandRxHeader_TypeDef *ptrRx, *ptrTx;//Apuntadores a estructuras
 CAN_Handler *can1, *can2;
 
 void CANx_GPIO(GPIO_TypeDef *Port_, uint8_t Pin_){
@@ -64,6 +65,7 @@ void CANx_Init(CAN_Handler *canBus, CAN_FilterTypeDef *fltr, CAN_DualFilterID_n_
 
 	CLEAR_BIT(canBus->Register->MCR, CAN_MCR_INRQ);//Initialization request off
 	CANx_WaitResetFlag(&(canBus->Register->MSR), CAN_MSR_INAK);
+	CANStatus=CAN_NORMAL; //Normal mode operation
 
 }
 
@@ -85,9 +87,8 @@ void CANx_SetCfgFilter(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, CAN_DualF
 		SET_BIT(canBus->Register->FS1R, (fltr->bitscale&1UL)<<fltr->indexFltr);//Dual 16 bits scale or Single 32 bits scale, for all 28 filters
 		if(fltr->IDE){
 			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR1, (((fltr->ID_L&0xFFFF)<<CAN_F0R1_FB3_Pos)|(((fltr->ID_H&0x1FFF)<<16)<<CAN_F0R1_FB3_Pos)));//Extended ID for 32 bits scale
-			//IDE, RTR?
 			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR2, (((fltr->Mask_L&0xFFFF)<<CAN_F0R1_FB3_Pos)|(((fltr->Mask_H&0x1FFF)<<16)<<CAN_F0R1_FB3_Pos)));//Mask for 32 bits scale, 0->Not compare, 1->Compare
-			//IDE, RTR?
+			//IDE, RTR, must be set, reset or don't care?
 		}
 		else{
 			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR1, ((fltr->ID_L&0x7FF)<<CAN_F0R1_FB21_Pos));//Standard ID for 32 bits scale
@@ -98,11 +99,11 @@ void CANx_SetCfgFilter(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, CAN_DualF
 		CLEAR_BIT(canBus->Register->FS1R, (fltr->bitscale&1UL)<<fltr->indexFltr);//Dual 16 bits scale or Single 32 bits scale, for all 28 filters
 
 		if(fltr->IDE){
-			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR1, ((0x7FF&fltr->ID_L)<<5)|((0x3&fltr->ID_H)<<1)|(0x8000&fltr->ID_L));//Extended ID for 16 bits
-			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR1, (((0x7FF&fltr->Mask_L)<<16)<<5)|(((0x3&fltr->Mask_H)<<16)<<1)|((0x8000&fltr->Mask_L)<<16));//Mask for 16 bits scale
+			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR1, ((0x7FF&fltr->ID_L)<<5)|((0x3&fltr->ID_H)<<1)|((0x8000&fltr->ID_L)>>15)|(1<<3));//Extended ID for 16 bits
+			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR1, (((0x7FF&fltr->Mask_L)<<16)<<5)|(((0x3&fltr->Mask_H)<<16)<<1)|((0x8000&fltr->Mask_L)<<1)|(1<<19));//Mask for 16 bits scale
 
-			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR2, ((0x7FF&fltr_ID2_Mask2->ID_L)<<5)|((0x3&fltr_ID2_Mask2->ID_H)<<1)|(0x8000&fltr_ID2_Mask2->ID_L));//Extended ID for 16 bits
-			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR2, (((0x7FF&fltr_ID2_Mask2->Mask_L)<<16)<<5)|(((0x3&fltr_ID2_Mask2->Mask_H)<<16)<<1)|((0x8000&fltr->Mask_L)<<16));//Mask for 16 bits scale
+			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR2, ((0x7FF&fltr_ID2_Mask2->ID_L)<<5)|((0x3&fltr_ID2_Mask2->ID_H)<<1)|((0x8000&fltr_ID2_Mask2->ID_L)>>15)|(1<<3));//Extended ID for 16 bits
+			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR2, (((0x7FF&fltr_ID2_Mask2->Mask_L)<<16)<<5)|(((0x3&fltr_ID2_Mask2->Mask_H)<<16)<<1)|((0x8000&fltr->Mask_L)<<1)|(1<<19));//Mask for 16 bits scale
 			//IDE, RTR?
 		}
 		else{
@@ -249,6 +250,37 @@ bool CANx_BitTiming(CAN_Handler * canBus, CAN_BitTimingTypeDef *tq){
 
 }
 
+void CANx_Tx(CAN_Handler * canBus, CAN_TxandRxHeader_TypeDef * TxHeader){
+	uint8_t indexMailBox = TxHeader->Index ;
+
+	CLEAR_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR, 0xFFFFFFFF);//CLEAR
+	CLEAR_BIT(canBus->Register->MailBoxTx[indexMailBox].TDTxR, 0xFFFFFFFF);//CLEAR
+	CLEAR_BIT(canBus->Register->MailBoxTx[indexMailBox].TDLxR , 0xFFFFFFFF);//CLEAR
+	CLEAR_BIT(canBus->Register->MailBoxTx[indexMailBox].TDHxR , 0xFFFFFFFF);//CLEAR
+
+	if(TxHeader->IDE){
+		SET_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR, CAN_TI0R_IDE);//Extended identifier.
+		SET_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR, (TxHeader->Identifier)<<CAN_TI0R_EXID_Pos);//ID
+	}
+	else{
+		CLEAR_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR, CAN_TI0R_IDE);//Standard identifier.
+		SET_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR, (TxHeader->Identifier)<<CAN_TI0R_STID_Pos);//ID
+	}
+	if(TxHeader->RTR){//Remote Frame
+		SET_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR, CAN_TI1R_RTR);//Remote frame
+	}
+	else{//Data Frame
+		CLEAR_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR, CAN_TI1R_RTR);//Data frame
+		SET_BIT(canBus->Register->MailBoxTx[indexMailBox].TDTxR, TxHeader->DLC);//Data length max 8 bytes
+		SET_BIT(canBus->Register->MailBoxTx[indexMailBox].TDLxR , TxHeader->DataL);//Low DATA
+		SET_BIT(canBus->Register->MailBoxTx[indexMailBox].TDHxR , TxHeader->DataH);//High DATA
+	}
+	SET_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR , CAN_TI0R_TXRQ);//Transmission request
+
+	//Success
+	//CANx_SetLEC(canBus);//Actualizamos el estado de error LEC
+
+}
 
 //MAILBOX Configuration
 //Trama de datos
@@ -258,78 +290,53 @@ bool CANx_BitTiming(CAN_Handler * canBus, CAN_BitTimingTypeDef *tq){
  * ExID: Extended Identifier
  * indexMailBox: Number of Mailbox Tx to use
  */
-void CANx_TxData(CAN_Handler * canBus, uint32_t ID, uint32_t DataL, uint32_t DataH, uint8_t DLC, bool ExID, uint8_t indexMailBox){
+void CANx_TxData(CAN_Handler * canBus, CAN_TxandRxHeader_TypeDef * TxHeader){
 
-	CLEAR_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR, 0xFFFFFFFF);//CLEAR
-	CLEAR_BIT(canBus->Register->MailBoxTx[indexMailBox].TDTxR, 0xFFFFFFFF);//CLEAR
-	CLEAR_BIT(canBus->Register->MailBoxTx[indexMailBox].TDLxR , 0xFFFFFFFF);//CLEAR
-	CLEAR_BIT(canBus->Register->MailBoxTx[indexMailBox].TDHxR , 0xFFFFFFFF);//CLEAR
+	TxHeader->RTR = CAN_TIxR_Data;//Aseguramos que será trama de datos
 
-	if(ExID){
-		SET_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR, CAN_TI0R_IDE);//Extended identifier.
-		SET_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR, ID<<CAN_TI0R_EXID_Pos);//ID
-	}
-	else{
-		CLEAR_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR, CAN_TI0R_IDE);//Standard identifier.
-		SET_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR, ID<<CAN_TI0R_STID_Pos);//ID
-	}
-	CLEAR_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR, CAN_TI1R_RTR);//Data frame
-	SET_BIT(canBus->Register->MailBoxTx[indexMailBox].TDTxR, DLC);//Data length max 8 bytes
-	SET_BIT(canBus->Register->MailBoxTx[indexMailBox].TDLxR , DataL);//Low DATA
-	SET_BIT(canBus->Register->MailBoxTx[indexMailBox].TDHxR , DataH);//High DATA
-	SET_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR , CAN_TI0R_TXRQ);//Transmission request
+	CANx_Tx(canBus, TxHeader);
 
-	CANx_TxSuccess(&(canBus->Register->TSR), indexMailBox);
+	CANx_TxSuccess(&(canBus->Register->TSR), TxHeader->Index);
 	//Success
 	CANx_SetLEC(canBus);//Actualizamos el estado de error LEC
 
 }
 //Trama Remota
-void CANx_TxRemote(CAN_Handler * canBus, uint32_t ID, bool ExID, uint8_t indexMailBox){
+void CANx_TxRemote(CAN_Handler * canBus, CAN_TxandRxHeader_TypeDef * TxHeader){
 
-	CLEAR_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR, 0xFFFFFFFF);//CLEAR
-	CLEAR_BIT(canBus->Register->MailBoxTx[indexMailBox].TDTxR, 0xFFFFFEFF);//CLEAR
-	CLEAR_BIT(canBus->Register->MailBoxTx[indexMailBox].TDLxR , 0xFFFFFFFF);//CLEAR
-	CLEAR_BIT(canBus->Register->MailBoxTx[indexMailBox].TDHxR , 0xFFFFFFFF);//CLEAR
+	TxHeader->RTR = CAN_TIxR_Remote;//Aseguramos que será trama remota
 
-	if(ExID){
-		SET_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR, CAN_TI0R_IDE);//Extended identifier.
-		SET_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR, ID<<CAN_TI0R_EXID_Pos);//ID
-	}
-	else{
-		CLEAR_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR, CAN_TI0R_IDE);//Standard identifier.
-		SET_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR, ID<<CAN_TI0R_STID_Pos);//ID
-	}
-	SET_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR, CAN_TI1R_RTR);//Remote frame
-	//SET_BIT(canBus->Register->MailBoxTx[2].TDTxR, DLC);//Data length max 8 bytes
-	SET_BIT(canBus->Register->MailBoxTx[indexMailBox].TIxR , CAN_TI0R_TXRQ);//Transmission request
+	CANx_Tx(canBus, TxHeader);
 
-	CANx_TxSuccess(&(canBus->Register->TSR), indexMailBox);
+	CANx_TxSuccess(&(canBus->Register->TSR), TxHeader->Index);
 	//Success
 	CANx_SetLEC(canBus);//Actualizamos el estado de error LEC
 
 }
 
-uint8_t CANx_RxFIFO0(CAN_Handler * canBus, uint32_t * RxData ){
+uint8_t CANx_RxFIFO0(CAN_Handler * canBus, CAN_TxandRxHeader_TypeDef * RxData ){
 	if(canBus->Register->RF0R && CAN_RF0R_FMP0){
 		if(CANx_GetLEC(canBus)!=CAN_ESR_LEC){//Revisamos si el último mensaje recibido tuvo algún error
 			if((canBus->Register->MailBoxFIFORx[0].RIxR) & CAN_RI0R_IDE){//Extended Identifier
-				RxData[0] = (canBus->Register->MailBoxFIFORx[0].RIxR & 0xFFFFFFF8)>>CAN_RI0R_EXID_Pos;
+				RxData->Identifier = (canBus->Register->MailBoxFIFORx[0].RIxR & 0xFFFFFFF8)>>CAN_RI0R_EXID_Pos;
+				RxData->IDE = true;
 			}
 			else{//Standard Identifier
-				RxData[0] = (canBus->Register->MailBoxFIFORx[0].RIxR & 0xFFE00000)>>CAN_RI0R_STID_Pos;
+				RxData->Identifier = (canBus->Register->MailBoxFIFORx[0].RIxR & 0xFFE00000)>>CAN_RI0R_STID_Pos;
+				RxData->IDE = false;
 			}
 
-			RxData[1]=canBus->Register->MailBoxFIFORx[0].RDTxR & 0xF;//Data Length Code
+			RxData->DLC = canBus->Register->MailBoxFIFORx[0].RDTxR & 0xF;//Data Length Code
 
 			if(!(canBus->Register->MailBoxFIFORx[0].RIxR & CAN_RI0R_RTR)){//Data frame
-				RxData[2]=canBus->Register->MailBoxFIFORx[0].RDLxR;
-				RxData[3]=canBus->Register->MailBoxFIFORx[0].RDHxR;
-				RxData[4]=(canBus->Register->MailBoxFIFORx[0].RDTxR&0xFF00)>>CAN_RDT0R_FMI_Pos;//Filter Match Index
+				RxData->DataL=canBus->Register->MailBoxFIFORx[0].RDLxR;
+				RxData->DataH=canBus->Register->MailBoxFIFORx[0].RDHxR;
+				RxData->RTR=CAN_RIxR_Data ;//Data Frame
 			}
 			else{
-				RxData[2]= (canBus->Register->MailBoxFIFORx[0].RDTxR&0xFF00)>>CAN_RDT0R_FMI_Pos;//Filter Match Index
+				RxData->RTR=CAN_RIxR_Remote ;//Remote Frame
 			}
+			RxData->Index = (canBus->Register->MailBoxFIFORx[0].RDTxR&0xFF00)>>CAN_RDT0R_FMI_Pos;//Filter Match Index
 		}
 
 		SET_BIT(canBus->Register->RF0R, CAN_RF0R_RFOM0);//Release FIFO output
@@ -338,27 +345,31 @@ uint8_t CANx_RxFIFO0(CAN_Handler * canBus, uint32_t * RxData ){
 
 }
 
-uint8_t CANx_RxFIFO1(CAN_Handler * canBus, uint32_t * RxData){
+uint8_t CANx_RxFIFO1(CAN_Handler * canBus, CAN_TxandRxHeader_TypeDef * RxData){
 
 	if(canBus->Register->RF1R & CAN_RF0R_FMP0){
 		if(CANx_GetLEC(canBus)!=CAN_ESR_LEC){//Revisamos si el último mensaje recibido tuvo algún error
 			if(canBus->Register->MailBoxFIFORx[1].RIxR && CAN_RI1R_IDE){//Extended Identifier
-				RxData[0] = (canBus->Register->MailBoxFIFORx[1].RIxR & 0xFFFFFFF8)>>CAN_RI1R_EXID_Pos;
+				RxData->Identifier = (canBus->Register->MailBoxFIFORx[1].RIxR & 0xFFFFFFF8)>>CAN_RI1R_EXID_Pos;
+				RxData->IDE = true;
 			}
 			else{//Standard Identifier
-				RxData[0] = (canBus->Register->MailBoxFIFORx[1].RIxR & 0xFFE00000)>>CAN_RI1R_STID_Pos;
+				RxData->Identifier = (canBus->Register->MailBoxFIFORx[1].RIxR & 0xFFE00000)>>CAN_RI1R_STID_Pos;
+				RxData->IDE = false;
 			}
 
-			RxData[1]=canBus->Register->MailBoxFIFORx[1].RDTxR & 0xF;//Data Length Code
+			RxData->DLC=canBus->Register->MailBoxFIFORx[1].RDTxR & 0xF;//Data Length Code
 
 			if(!(canBus->Register->MailBoxFIFORx[1].RIxR & CAN_RI1R_RTR)){//Data frame
-				RxData[2]=canBus->Register->MailBoxFIFORx[1].RDLxR;
-				RxData[3]=canBus->Register->MailBoxFIFORx[1].RDHxR;
-				RxData[4]=(canBus->Register->MailBoxFIFORx[1].RDTxR&0xFF00)>>CAN_RDT1R_FMI_Pos;//Filter Match Index
+				RxData->DataL=canBus->Register->MailBoxFIFORx[1].RDLxR;
+				RxData->DataH=canBus->Register->MailBoxFIFORx[1].RDHxR;
+				RxData->RTR=CAN_RIxR_Data ;//Data Frame
 			}
 			else{
-				RxData[2]= (canBus->Register->MailBoxFIFORx[1].RDTxR&0xFF00)>>CAN_RDT1R_FMI_Pos;//Filter Match Index
+				RxData->RTR=CAN_RIxR_Remote;//Data Frame
 			}
+
+			RxData->Index= (canBus->Register->MailBoxFIFORx[1].RDTxR&0xFF00)>>CAN_RDT1R_FMI_Pos;//Filter Match Index
 		}
 		SET_BIT(canBus->Register->RF1R, CAN_RF1R_RFOM1);//Release FIFO output
 	}
@@ -373,109 +384,138 @@ void CANx_BusOffRecovery(CAN_Handler * canBus){//Bit TEC>255
 
 void CANx_CallBackRX0(CAN_Handler *can){
 	if(can->Register->RF0R & CAN_RF0R_FMP0){//New Message
-		CANx_RxFIFO0(can, buffRx);//Lee el nuevo mensaje
+		CANx_RxFIFO0(can, ptrRx);//Lee el nuevo mensaje
 	}
 	else if(can->Register->RF0R & CAN_RF0R_FULL0){//FULL FIFO
-		while(CANx_RxFIFO0(can, buffRx)){//Lee los mensajes
-			buffRx+=32;//Cambiamos de dirección
+		while(CANx_RxFIFO0(can, ptrRx)){//Lee los mensajes
+			ptrRx++;//Cambiamos de dirección a siguiente estuctura
 		}
 	}
 	else if(can->Register->RF0R & CAN_RF0R_FOVR0){//OVER FIFO
-		while(CANx_RxFIFO0(can, buffRx)){//Lee los mensajes
-			buffRx+=32;//Cambiamos de dirección
+		while(CANx_RxFIFO0(can, ptrRx)){//Lee los mensajes
+			ptrRx++;//Cambiamos de dirección
 		}
 	}
 }
 
 void CANx_CallBackRX1(CAN_Handler *can){
 	if(can->Register->RF1R & CAN_RF1R_FMP1){//New Message
-		CANx_RxFIFO1(can, buffRx);//Lee el nuevo mensaje
+		CANx_RxFIFO1(can, ptrRx);//Lee el nuevo mensaje
 	}
 	else if(can->Register->RF1R & CAN_RF1R_FULL1){//FULL FIFO
-		while(CANx_RxFIFO1(can, buffRx)){//Lee los mensajes
-			buffRx+=32;//Cambiamos de dirección
+		while(CANx_RxFIFO1(can, ptrRx)){//Lee los mensajes
+			ptrRx++;//Cambiamos de dirección
 		}
 	}
 	else if(can->Register->RF1R & CAN_RF1R_FOVR1){//OVER FIFO
-		while(CANx_RxFIFO1(can, buffRx)){//Lee los mensajes
-			buffRx+=32;//Cambiamos de dirección
+		while(CANx_RxFIFO1(can, ptrRx)){//Lee los mensajes
+			ptrRx++;//Cambiamos de dirección
 		}
 	}
 }
 
 void CANx_CallBackSCE(CAN_Handler *can){
 	if(CANx_GetError(can, CAN_ESR_EWGF)){
-		errorStatus=1;//TEC or REC >= 96
+		CANStatus=CAN_ESR_EWGF;//TEC or REC >= 96
 	}
 	else if(CANx_GetError(can, CAN_ESR_EPVF)){
-		errorStatus=2;//TEC or REC >= 127
+		CANStatus=CAN_ESR_EPVF;//TEC or REC >= 127
 	}
 	else if(CANx_GetError(can, CAN_ESR_BOFF)){
-		errorStatus=3;//TEC or REC >= 255
+		CANStatus=CAN_ESR_BOFF;//TEC or REC >= 255
 		CANx_BusOffRecovery(can);//Enters in recovery mode
 	}
 	else if(CANx_GetError(can, CAN_ESR_LEC)){
-		errorStatus=1;//Set error status
+		CANStatus=CAN_ESR_LEC;//Set error status
 	}
 	else if(can->Register->MSR&CAN_MSR_WKUI){
-		//Sleep mode
+		CANStatus=CAN_MSR_WKUI;//Enters in Sleep mode
 	}
 	else if(can->Register->MSR&CAN_MSR_SLAKI){
-		//Wake up mode
+		CANStatus=CAN_MSR_SLAKI;//Enters in Wake up mode
 	}
 }
 
 void CAN1_TX_IRQHandler(){
 	/* CAN1 TX interrupts                                                 */
+	CANx_SetICPR(NVIC_CAN1Tx_ICPR0_Pos);
 	//Becomes Empty
 	if(CAN1->TSR & CAN_TSR_RQCP0){//Tx0 empty
-		CAN1emptyTx[0]=true;
+		SET_BIT(CAN1->TSR, CAN_TSR_RQCP0);//Clear RQCP
+		if(CAN1Tx){
+			ptrTx->Index=0;}
 	}
 	else if(CAN1->TSR & CAN_TSR_RQCP1){//Tx1 empty
-		CAN1emptyTx[1]=true;
+		SET_BIT(CAN1->TSR, CAN_TSR_RQCP1);//Clear RQCP
+		if(CAN1Tx){
+			ptrTx->Index=1;}
 	}
 	else if(CAN1->TSR & CAN_TSR_RQCP2){//Tx2 empty
-		CAN1emptyTx[2]=true;
+		SET_BIT(CAN1->TSR, CAN_TSR_RQCP2);//Clear RQCP
+		if(CAN1Tx){
+			ptrTx->Index=2;}
+	}
+	if(CAN1Tx){//Se indica una transmisión
+		CANx_Tx(can1, ptrTx);
+		CANx_SetLEC(can1);
 	}
 }
 
 void CAN1_RX0_IRQHandler(){
 	/* CAN1 RX0 interrupts                                                */
+	CANx_SetICPR(NVIC_CAN1Rx0_ICPR0_Pos);
 	CANx_CallBackRX0(can1);
 
 }
 void CAN1_RX1_IRQHandler(){
 	/* CAN1 RX1 interrupts                                                */
+	CANx_SetICPR(NVIC_CAN1Rx1_ICPR0_Pos);
 	CANx_CallBackRX1(can1);
 }
 void CAN1_SCE_IRQHandler(){
 	/* CAN1 SCE interrupt                                                 */
+	CANx_SetICPR(NVIC_CAN1SCE_ICPR0_Pos);
 	CANx_CallBackSCE(can1);
 }
 
 void CAN2_TX_IRQHandler(){
 	/* CAN2 TX interrupts                                                 */
+	CANx_SetICPR(NVIC_CAN2Tx_ICPR1_Pos);
 	//Becomes Empty
+
 	if(CAN2->TSR & CAN_TSR_RQCP0){//Tx0 empty
-		CAN2emptyTx[0]=true;
+		SET_BIT(CAN2->TSR, CAN_TSR_RQCP0);//Clear RQCP
+		if(CAN2Tx){
+			ptrTx->Index=0;}
 	}
 	else if(CAN2->TSR & CAN_TSR_RQCP1){//Tx1 empty
-		CAN2emptyTx[1]=true;
+		SET_BIT(CAN2->TSR, CAN_TSR_RQCP1);//Clear RQCP
+		if(CAN2Tx){
+			ptrTx->Index=1;}
 	}
 	else if(CAN2->TSR & CAN_TSR_RQCP2){//Tx2 empty
-		CAN2emptyTx[2]=true;
+		SET_BIT(CAN2->TSR, CAN_TSR_RQCP2);//Clear RQCP
+		if(CAN2Tx){
+			ptrTx->Index=2;}
+	}
+	if(CAN2Tx){//Se indica una transmisión
+		CANx_Tx(can2, ptrTx);
+		CANx_SetLEC(can2);
 	}
 }
 void CAN2_RX0_IRQHandler(){
 	/* CAN1 RX0 interrupts                                                */
+	CANx_SetICPR(NVIC_CAN2Rx0_ICPR2_Pos);
 	CANx_CallBackRX0(can2);
 }
 void CAN2_RX1_IRQHandler(){
 	/* CAN1 RX1 interrupts                                                */
+	CANx_SetICPR(NVIC_CAN2Rx1_ICPR2_Pos);
 	CANx_CallBackRX1(can2);
 }
 void CAN2_SCE_IRQHandler(){
 	/* CAN1 SCE interrupt                                                 */
+	CANx_SetICPR(NVIC_CAN2SCE_ICPR2_Pos);
 	CANx_CallBackSCE(can2);
 }
 
@@ -485,6 +525,54 @@ void CANx_SetInt(CAN_Handler * canBus, uint32_t bitReg){
 
 void CANx_ResetInt(CAN_Handler * canBus, uint32_t bitReg){
 	CLEAR_BIT(canBus->Register->IER, bitReg);
+}
+
+void CANx_EnTxInt(CAN_Handler * canBus){
+	SET_BIT(canBus->Register->IER, CAN_IER_TMEIE);
+}
+
+void CANx_DisTxInt(CAN_Handler * canBus){
+	CLEAR_BIT(canBus->Register->IER, CAN_IER_TMEIE);
+}
+
+void CANx_EnFIFO0Ints(CAN_Handler * canBus){
+	SET_BIT(canBus->Register->IER, CAN_IER_FMPIE0|CAN_IER_FFIE0|CAN_IER_FOVIE0);
+}
+
+void CANx_DisFIFO0Ints(CAN_Handler * canBus){
+	CLEAR_BIT(canBus->Register->IER, CAN_IER_FMPIE0|CAN_IER_FFIE0|CAN_IER_FOVIE0);
+}
+
+void CANx_EnFIFO1Ints(CAN_Handler * canBus){
+	SET_BIT(canBus->Register->IER, CAN_IER_FMPIE1|CAN_IER_FFIE1|CAN_IER_FOVIE1);
+}
+
+void CANx_DisFIFO1Ints(CAN_Handler * canBus){
+	CLEAR_BIT(canBus->Register->IER, CAN_IER_FMPIE1|CAN_IER_FFIE1|CAN_IER_FOVIE1);
+}
+
+void CANx_EnSECInts(CAN_Handler * canBus){
+	SET_BIT(canBus->Register->IER, CAN_IER_ERRIE|CAN_IER_EWGIE|CAN_IER_EPVIE|CAN_IER_BOFIE|CAN_IER_LECIE);
+}
+
+void CANx_DisSECInts(CAN_Handler * canBus){
+	CLEAR_BIT(canBus->Register->IER, CAN_IER_ERRIE|CAN_IER_EWGIE|CAN_IER_EPVIE|CAN_IER_BOFIE|CAN_IER_LECIE);
+}
+
+void CANx_EnWakeupInt(CAN_Handler * canBus){
+	SET_BIT(canBus->Register->IER, CAN_IER_WKUIE);
+}
+
+void CANx_DisWakeupInt(CAN_Handler * canBus){
+	CLEAR_BIT(canBus->Register->IER, CAN_IER_WKUIE);
+}
+
+void CANx_EnSleepInt(CAN_Handler * canBus){
+	SET_BIT(canBus->Register->IER, CAN_IER_SLKIE);
+}
+
+void CANx_DisSleepInt(CAN_Handler * canBus){
+	CLEAR_BIT(canBus->Register->IER, CAN_IER_SLKIE);
 }
 
 uint32_t CANx_GetError(CAN_Handler * canBus, uint32_t bitReg){
@@ -497,6 +585,20 @@ uint8_t CANx_GetLEC(CAN_Handler * canBus){
 
 void CANx_SetLEC(CAN_Handler * canBus){
 	canBus->Register->ESR |= CAN_ESR_LEC;
+}
+
+/*
+ * Receive error counter
+ */
+uint8_t CANx_GetREC(CAN_Handler * canBus){
+	return (CANx_GetError(canBus, CAN_ESR_REC)>>CAN_ESR_REC_Pos);
+}
+
+/*
+ * Transmit error counter
+ */
+uint8_t CANx_GetTEC(CAN_Handler * canBus){
+	return (CANx_GetError(canBus, CAN_ESR_TEC)>>CAN_ESR_TEC_Pos);
 }
 
 bool CANx_TxSuccess(volatile uint32_t *SR, uint8_t indexMailBox){
@@ -566,3 +668,30 @@ void CANx_WaitResetFlag(volatile uint32_t *SR, uint32_t BitReg){
 	}
 }
 
+void CANx_SetICPR(uint8_t x){
+	if(x==NVIC_CAN1Tx_ICPR0_Pos){
+		NVIC_ICPR0 |= (1<<NVIC_CAN1Tx_ICPR0_Pos); //Limpia posible bandera pendiente
+	}
+	else if(x==NVIC_CAN1Rx0_ICPR0_Pos){
+		NVIC_ICPR0 |= (1<<NVIC_CAN1Rx0_ICPR0_Pos); //Limpia posible bandera pendiente
+	}
+	else if(x==NVIC_CAN1Rx1_ICPR0_Pos){
+		NVIC_ICPR0 |= (1<<NVIC_CAN1Rx1_ICPR0_Pos); //Limpia posible bandera pendiente
+	}
+	else if(x==NVIC_CAN1SCE_ICPR0_Pos){
+		NVIC_ICPR0 |= (1<<NVIC_CAN1SCE_ICPR0_Pos); //Limpia posible bandera pendiente
+	}
+	else if(x==NVIC_CAN2Tx_ICPR1_Pos){
+		NVIC_ICPR1 |= (1<<NVIC_CAN2Tx_ICPR1_Pos); //Limpia posible bandera pendiente
+	}
+	else if(x==NVIC_CAN2Rx0_ICPR2_Pos){
+		NVIC_ICPR2 |= (1<<NVIC_CAN2Rx0_ICPR2_Pos); //Limpia posible bandera pendiente
+	}
+	else if(x==NVIC_CAN2Rx1_ICPR2_Pos){
+		NVIC_ICPR2 |= (1<<NVIC_CAN2Rx1_ICPR2_Pos); //Limpia posible bandera pendiente
+	}
+	else if(x==NVIC_CAN2SCE_ICPR2_Pos){
+		NVIC_ICPR2 |= (1<<NVIC_CAN2SCE_ICPR2_Pos); //Limpia posible bandera pendiente
+	}
+
+}
