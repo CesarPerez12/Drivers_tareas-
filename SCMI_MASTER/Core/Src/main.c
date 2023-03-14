@@ -77,12 +77,12 @@ int main(void)
 		//CANx_TxData(&can, &TxHeader);
 		//dato++;
 		//CANx_SetTxHeader(&TxHeader, 0x10000, true, 8, CAN_TIxR_Data, dato, dato, 0);
-		for (i = 0; i < 100000000; ++i);// Retardo
+		//for (i = 0; i < 100000000; ++i);// Retardo
 		//CANx_TxRemote(&can, &TxHeader);
 		//for (i = 0; i < 100000000; ++i);// Retardo
 		//CANx_TxData(&can, &TxHeader);
-		CANx_RxFIFO0(&can, &RxData);
-		CANx_RxFIFO1(&can, &RxData);
+		//CANx_RxFIFO0(&can, &RxData);
+		//CANx_RxFIFO1(&can, &RxData);
 
 	}
 }
