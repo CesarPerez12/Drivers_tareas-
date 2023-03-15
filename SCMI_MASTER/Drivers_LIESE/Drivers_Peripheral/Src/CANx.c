@@ -72,6 +72,10 @@ void CANx_Init(CAN_Handler *canBus, CAN_FilterTypeDef *fltr, CAN_DualFilterID_n_
 	CLEAR_BIT(canBus->Register->MCR, CAN_MCR_INRQ);//Initialization request off
 	CANx_WaitResetFlag(&(canBus->Register->MSR), CAN_MSR_INAK);
 
+	if(dual_mode){
+		CLEAR_BIT(can2->Register->MCR, CAN_MCR_INRQ);//Initialization request off
+		CANx_WaitResetFlag(&(can2->Register->MSR), CAN_MSR_INAK);
+	}
 
 
 	CANStatus=CAN_NORMAL; //Normal mode operation
@@ -173,7 +177,9 @@ void CANx_CfgFilters(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, CAN_DualFil
 			CANx_SetCfgFilter(canBus, &fltr[i], &fltr_ID2_Mask2[aux]);//Recorremos el arreglo de estructuras
 		}
 	}
-
+	if(dual_mode){
+		CLEAR_BIT(can2->Register->FMR, CAN_FMR_FINIT);//Initialization mode off
+	}
 	CLEAR_BIT(canBus->Register->FMR, CAN_FMR_FINIT);//Initialization mode off
 }
 

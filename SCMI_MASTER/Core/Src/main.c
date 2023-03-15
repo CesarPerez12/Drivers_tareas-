@@ -36,14 +36,16 @@ int main(void)
 {
 	CAN_FilterTypeDef FLTR[2];
 	CAN_DualFilterID_n_MaskTypeDef dualFLTR[1];
-	CAN_Handler can;
+	CAN_Handler can, Can2;
 	CAN_BitTimingTypeDef tq;
 	can.Register=CAN1;
+	Can2.Register=CAN2;
 	//Los prescaladores se seleccionan por n=1,2,...,8. Siendo 2^n el valor del preescalador
 	SystClock_Init(2,1,80,1,0,0);//SYSCLK -> PLLP, SYSPLL -> HSI, SYSCLK -> 80MHz, preAHB1 -> divided by 2^1
 	//preAPB1 -> Not divided, preAPB2 -> not divided, APB1 = 40MHZ, APB2=40MHz.
 
 	can1=&can;
+	can2=&Can2;
 	ptrRx=&RxData;//Apunta a dirección de memoria
 	ptrTx=&TxHeader;//Apuntado a direcciones de memoria
 	//CAN1Tx=true;//Indica transmisión a la interrupción
