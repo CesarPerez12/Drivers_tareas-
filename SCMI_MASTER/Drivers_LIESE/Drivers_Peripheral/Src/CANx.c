@@ -154,7 +154,7 @@ void CANx_CfgFilters(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, CAN_DualFil
 
 	for (i = 0; i < nofltrArray; ++i) {
 		aux=0;
-		while((fltr->indexFltr==fltr_ID2_Mask2->indexFltr)&&(aux<28)){
+		while((fltr->indexFltr!=fltr_ID2_Mask2->indexFltr)&&(aux<28)){
 			aux++;
 		}
 		if(aux>=28){
