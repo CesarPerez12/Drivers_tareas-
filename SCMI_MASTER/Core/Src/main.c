@@ -26,7 +26,7 @@
 
 void CANx_SetParFLTR(CAN_FilterTypeDef * FLTR, uint8_t index, uint8_t scale, uint16_t IDL, uint16_t IDH,
 		uint16_t MaskL, uint32_t MaskH, uint8_t mode, uint8_t FIFO, bool IDE);
-void CANx_SetParDualFLTR(CAN_DualFilterID_n_MaskTypeDef * FLTR, uint8_t index, uint16_t IDL, uint16_t IDH, uint16_t MaskL, uint16_t MaskH);
+void CANx_SetParDualFLTR(CAN_DualFilterID_n_MaskTypeDef * FLTR, bool IDE, uint8_t index, uint16_t IDL, uint16_t IDH, uint16_t MaskL, uint16_t MaskH);
 void CANx_SetTxHeader(CAN_TxandRxHeader_TypeDef * TxHeader, uint32_t ID, bool IDE, uint8_t DLC, uint8_t RTR, uint32_t DataH,
 		uint32_t DataL, uint8_t index);
 CAN_TxandRxHeader_TypeDef TxHeader, RxData;
@@ -42,17 +42,21 @@ int main(void)
 	//Los prescaladores se seleccionan por n=1,2,...,8. Siendo 2^n el valor del preescalador
 	SystClock_Init(2,1,80,1,0,0);//SYSCLK -> PLLP, SYSPLL -> HSI, SYSCLK -> 80MHz, preAHB1 -> divided by 2^1
 	//preAPB1 -> Not divided, preAPB2 -> not divided, APB1 = 40MHZ, APB2=40MHz.
-	//NVIC_SetCFGR(CAN1_Rx0_IRQ, 3);
 
+	can1=&can;
+	ptrRx=&RxData;//Apunta a dirección de memoria
+	ptrTx=&TxHeader;//Apuntado a direcciones de memoria
+	//CAN1Tx=true;//Indica transmisión a la interrupción
 
 	CANx_GPIO(GPIOB,8);//CAN RX
 	CANx_GPIO(GPIOB,9);//CAN TX
 
-	CANx_SetParFLTR(&FLTR[0], 0, CAN_FS1R_S32, 0x3, 0x3, 0x3, 0x3, CAN_FM1R_MaskMode,
-			CAN_FFA1R_FIFO0, true);
-	CANx_SetParDualFLTR(&dualFLTR[0], 0, 0x1, 0x1, 0x1, 0x1);
-	//0->Filter 0; CAN_FS1R_S32->32 bits scale; 0xFFFF->IDL,  0xFFFF->IDH;  0xFFFF->MaskL,  0xFFFF->MaskH;
-	//CAN_FM1R_MaskMode-> ID in mask mode; CAN_FFA1R_FIFO0-> assigned to FIFO 0, false->Standard ID
+	CANx_SetParFLTR(&FLTR[0], 0, CAN_FS1R_D16, 0x0, 0x3, 0x0, 0x3, CAN_FM1R_MaskMode,
+			CAN_FFA1R_FIFO1, true);
+	/*0->Filter 0; CAN_FS1R_D16->16 bits scale; 0x0->IDL,  0x3->IDH;  0x0->MaskL,  0x3->MaskH;
+	CAN_FM1R_MaskMode-> ID in mask mode; CAN_FFA1R_FIFO0-> assigned to FIFO 0, true->Extended ID*/
+	CANx_SetParDualFLTR(&dualFLTR[0], false, 0, 0x0, 0x1, 0x0, 0x1);//Only used in Dual Mode Filter
+	/*false->Standard ID; 0->Filter 0; 0x1->IDL,  0x0->IDH;  0x0->MaskL,  0x1->MaskH */
 	//CANx_SetParFLTR(&FLTR[1], 1, CAN_FS1R_D16, 1200, 1201, 0xFFFF, 0xFFFF, CAN_FM1R_MaskMode, CAN_FFA1R_FIFO1);
 
 	//Time quanta Parameters
@@ -63,19 +67,23 @@ int main(void)
 	CANx_Init(&can, FLTR, dualFLTR, &tq, false, 0, 1);//can struct; array of sturct FLTR; tq struct; false->No dual mode; 0->Number of filter for CAN2;
 	//3->Number of filters to configure
 
-	NVIC_SetCFGR(CAN1_Tx_IRQ, 3);
-	NVIC_SetCFGR(CAN1_Rx0_IRQ, 4);
-	NVIC_SetCFGR(CAN1_Rx1_IRQ, 5);
-	NVIC_SetCFGR(CAN1_SCE_IRQ, 6);
+	//NVIC_SetCFGR(CAN1_Tx_IRQ, 3);//Enable Tx Int
+	//NVIC_SetCFGR(CAN1_Rx0_IRQ, 4);//Enable Rx0 Int
+	//NVIC_SetCFGR(CAN1_Rx1_IRQ, 5);//Enable Rx1 Int
+	//NVIC_SetCFGR(CAN1_SCE_IRQ, 6);//Enable SCE Int
+
+	//CANx_EnTxInt(&can);//Set Interrupt
+	//CANx_EnFIFO1Ints(&can);//Set Interrupt
 
     /* Loop forever */
 	while(1){
 
 		/*Code for polling*/
-		//CANx_SetTxHeader(&TxHeader, 0x30003, true, 8, CAN_TIxR_Data, dato, dato, 0);
-		//for (i = 0; i < 100000000; ++i);// Retardo
-		//CANx_TxData(&can, &TxHeader);
-		//dato++;
+		CANx_SetTxHeader(&TxHeader, 0x38000, true, 8, CAN_TIxR_Data, dato, dato, 0);
+		for (i = 0; i < 100000000; ++i);// Retardo
+		//CANx_EnSECInts(&can);//Colocar la interrupción cuando todo esté conectado correctamente
+		CANx_TxData(&can, &TxHeader);
+		dato++;
 		//CANx_SetTxHeader(&TxHeader, 0x10000, true, 8, CAN_TIxR_Data, dato, dato, 0);
 		//for (i = 0; i < 100000000; ++i);// Retardo
 		//CANx_TxRemote(&can, &TxHeader);
@@ -112,12 +120,14 @@ void CANx_SetParFLTR(
 
 void CANx_SetParDualFLTR(
 		CAN_DualFilterID_n_MaskTypeDef * FLTR,
+		bool      IDE,
 		uint8_t index,
 		uint16_t IDL,
 		uint16_t IDH,
 		uint16_t MaskL,
 		uint16_t MaskH)
 {
+	FLTR->IDE = IDE;
 	FLTR->indexFltr=index;
 	FLTR->ID_L=IDL;
 	FLTR->ID_H=IDH;

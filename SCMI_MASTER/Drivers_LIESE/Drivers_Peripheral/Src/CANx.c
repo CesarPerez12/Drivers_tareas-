@@ -59,6 +59,8 @@ void CANx_Init(CAN_Handler *canBus, CAN_FilterTypeDef *fltr, CAN_DualFilterID_n_
 	CLEAR_BIT(canBus->Register->MCR, CAN_MCR_RESET);//Normal operation.
 	CLEAR_BIT(canBus->Register->MCR, CAN_MCR_DBF);//CAN working during debug
 
+	//---------------------------------------------CAN2 Initialization Here---------------------------------------------------
+
 	CANx_BitTiming(canBus, tq);
 
 	CANx_CfgFilters(canBus, fltr, fltr_ID2_Mask2, dual_mode, nofltrCANslave, nofltrArray);
@@ -99,18 +101,20 @@ void CANx_SetCfgFilter(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, CAN_DualF
 		CLEAR_BIT(canBus->Register->FS1R, (fltr->bitscale&1UL)<<fltr->indexFltr);//Dual 16 bits scale or Single 32 bits scale, for all 28 filters
 
 		if(fltr->IDE){
-			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR1, ((0x7FF&fltr->ID_L)<<5)|((0x3&fltr->ID_H)<<1)|((0x8000&fltr->ID_L)>>15)|(1<<3));//Extended ID for 16 bits
-			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR1, (((0x7FF&fltr->Mask_L)<<16)<<5)|(((0x3&fltr->Mask_H)<<16)<<1)|((0x8000&fltr->Mask_L)<<1)|(1<<19));//Mask for 16 bits scale
-
-			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR2, ((0x7FF&fltr_ID2_Mask2->ID_L)<<5)|((0x3&fltr_ID2_Mask2->ID_H)<<1)|((0x8000&fltr_ID2_Mask2->ID_L)>>15)|(1<<3));//Extended ID for 16 bits
-			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR2, (((0x7FF&fltr_ID2_Mask2->Mask_L)<<16)<<5)|(((0x3&fltr_ID2_Mask2->Mask_H)<<16)<<1)|((0x8000&fltr->Mask_L)<<1)|(1<<19));//Mask for 16 bits scale
-			//IDE, RTR?
+			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR1, ((0x3&fltr->ID_H)<<1)|((0x8000&fltr->ID_L)>>15)|(1<<3));//Extended ID for 16 bits
+			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR1, (((0x3&fltr->Mask_H)<<16)<<1)|((0x8000&fltr->Mask_L)<<1)|(1<<19));//Mask for 16 bits scale
 		}
 		else{
 
 			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR1, ((0x7FF&fltr->ID_L)<<5));//Standard ID for 16 bits
 			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR1, (((0x7FF&fltr->Mask_L)<<16)<<5));//Mask for 16 bits scale
-
+		}
+		if(fltr_ID2_Mask2->IDE){
+			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR2, ((0x3&fltr_ID2_Mask2->ID_H)<<1)|((0x8000&fltr_ID2_Mask2->ID_L)>>15)|(1<<3));//Extended ID for 16 bits
+			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR2,(((0x3&fltr_ID2_Mask2->Mask_H)<<16)<<1)|((0x8000&fltr->Mask_L)<<1)|(1<<19));//Mask for 16 bits scale
+			//IDE, RTR?
+		}
+		else{
 			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR2,  ((0x7FF&fltr_ID2_Mask2->ID_L)<<5));//Standard ID for 16 bits scale
 			SET_BIT(canBus->Register->FiR[fltr->indexFltr].FiR2,  (((0x7FF&fltr_ID2_Mask2->Mask_L)<<16)<<5));//Mask for 16 bits scale, 0->Not compare, 1->Compare
 			//IDE, RTR?
@@ -415,15 +419,16 @@ void CANx_CallBackRX1(CAN_Handler *can){
 }
 
 void CANx_CallBackSCE(CAN_Handler *can){
-	if(CANx_GetError(can, CAN_ESR_EWGF)){
-		CANStatus=CAN_ESR_EWGF;//TEC or REC >= 96
+
+	if(CANx_GetError(can, CAN_ESR_BOFF)){
+		CANStatus=CAN_ESR_BOFF;//TEC or REC >= 255
+		CANx_BusOffRecovery(can);//Enters in recovery mode
 	}
 	else if(CANx_GetError(can, CAN_ESR_EPVF)){
 		CANStatus=CAN_ESR_EPVF;//TEC or REC >= 127
 	}
-	else if(CANx_GetError(can, CAN_ESR_BOFF)){
-		CANStatus=CAN_ESR_BOFF;//TEC or REC >= 255
-		CANx_BusOffRecovery(can);//Enters in recovery mode
+	else if(CANx_GetError(can, CAN_ESR_EWGF)){
+		CANStatus=CAN_ESR_EWGF;//TEC or REC >= 96
 	}
 	else if(CANx_GetError(can, CAN_ESR_LEC)){
 		CANStatus=CAN_ESR_LEC;//Set error status
@@ -458,6 +463,7 @@ void CAN1_TX_IRQHandler(){
 	if(CAN1Tx){//Se indica una transmisión
 		CANx_Tx(can1, ptrTx);
 		CANx_SetLEC(can1);
+		CAN1Tx=false;
 	}
 }
 

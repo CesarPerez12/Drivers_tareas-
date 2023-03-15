@@ -57,6 +57,7 @@ typedef struct{
 }CAN_FilterTypeDef;
 
 typedef struct{
+	bool      IDE;
 	uint8_t   indexFltr;
 	uint16_t  ID_L;
 	uint16_t  ID_H;
