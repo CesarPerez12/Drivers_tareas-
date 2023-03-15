@@ -3817,6 +3817,7 @@ extern CAN_TxandRxHeader_TypeDef *ptrRx, *ptrTx;
 #define CAN_RIxR_Remote                1UL//Remote Frame
 
 void CANx_GPIO(GPIO_TypeDef *Port_, uint8_t Pin_);
+void CANx_SetMCRPred(CAN_Handler *canBus);
 void CANx_Init(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, CAN_DualFilterID_n_MaskTypeDef * fltr_ID2_Mask2, CAN_BitTimingTypeDef *tq, bool dual_mode, uint8_t nofltrCANslave,  uint8_t nofltrArray);
 void CANx_CfgFilters(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, CAN_DualFilterID_n_MaskTypeDef * fltr_ID2_Mask2, bool dual_mode, uint8_t nofltrCANslave ,uint8_t nofltrArray);
 bool CANx_BitTiming(CAN_Handler * canBus, CAN_BitTimingTypeDef *tq);
@@ -3849,6 +3850,7 @@ void CANx_EnWakeupInt(CAN_Handler * canBus);
 void CANx_DisWakeupInt(CAN_Handler * canBus);
 void CANx_EnSleepInt(CAN_Handler * canBus);
 void CANx_DisSleepInt(CAN_Handler * canBus);
+uint8_t CANx_GetTME(CAN_Handler * canBus, uint8_t index);
 uint8_t CANx_GetLEC(CAN_Handler * canBus);
 void CANx_SetLEC(CAN_Handler * canBus);
 uint8_t CANx_GetREC(CAN_Handler * canBus);

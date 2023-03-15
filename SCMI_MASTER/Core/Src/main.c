@@ -51,7 +51,7 @@ int main(void)
 	CANx_GPIO(GPIOB,8);//CAN RX
 	CANx_GPIO(GPIOB,9);//CAN TX
 
-	CANx_SetParFLTR(&FLTR[0], 0, CAN_FS1R_D16, 0x0, 0x3, 0x0, 0x3, CAN_FM1R_MaskMode,
+	CANx_SetParFLTR(&FLTR[0], 0, CAN_FS1R_D16, 0x0, 0x3, 0x0, 0x1, CAN_FM1R_MaskMode,
 			CAN_FFA1R_FIFO1, true);
 	/*0->Filter 0; CAN_FS1R_D16->16 bits scale; 0x0->IDL,  0x3->IDH;  0x0->MaskL,  0x3->MaskH;
 	CAN_FM1R_MaskMode-> ID in mask mode; CAN_FFA1R_FIFO0-> assigned to FIFO 0, true->Extended ID*/
@@ -70,7 +70,7 @@ int main(void)
 	//NVIC_SetCFGR(CAN1_Tx_IRQ, 3);//Enable Tx Int
 	//NVIC_SetCFGR(CAN1_Rx0_IRQ, 4);//Enable Rx0 Int
 	//NVIC_SetCFGR(CAN1_Rx1_IRQ, 5);//Enable Rx1 Int
-	//NVIC_SetCFGR(CAN1_SCE_IRQ, 6);//Enable SCE Int
+	NVIC_SetCFGR(CAN1_SCE_IRQ, 6);//Enable SCE Int
 
 	//CANx_EnTxInt(&can);//Set Interrupt
 	//CANx_EnFIFO1Ints(&can);//Set Interrupt
@@ -79,13 +79,14 @@ int main(void)
 	while(1){
 
 		/*Code for polling*/
-		CANx_SetTxHeader(&TxHeader, 0x38000, true, 8, CAN_TIxR_Data, dato, dato, 0);
-		for (i = 0; i < 100000000; ++i);// Retardo
-		//CANx_EnSECInts(&can);//Colocar la interrupción cuando todo esté conectado correctamente
+		CANx_SetTxHeader(&TxHeader, 0x10000, true, 8, CAN_TIxR_Data, dato, dato, 0);
+		CANx_BusOffRecovery(&can);//Enters in recovery mode
+		//for (i = 0; i < 100000000; ++i);// Retardo
+		CANx_EnSECInts(&can);//Colocar la interrupción cuando todo esté conectado correctamente
 		CANx_TxData(&can, &TxHeader);
 		dato++;
 		//CANx_SetTxHeader(&TxHeader, 0x10000, true, 8, CAN_TIxR_Data, dato, dato, 0);
-		//for (i = 0; i < 100000000; ++i);// Retardo
+		for (i = 0; i < 10000000; ++i);// Retardo
 		//CANx_TxRemote(&can, &TxHeader);
 		//for (i = 0; i < 100000000; ++i);// Retardo
 		//CANx_TxData(&can, &TxHeader);

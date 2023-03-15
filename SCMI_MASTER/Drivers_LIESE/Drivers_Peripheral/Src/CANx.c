@@ -19,26 +19,7 @@ void CANx_GPIO(GPIO_TypeDef *Port_, uint8_t Pin_){
 	GPIOx_InitAF(Port_, Pin_, GPIO_OTYPER_PP, GPIO_OSPEEDR_HS, GPIO_AFR_AFSEL_CAN);
 }
 
-/*
- * dual_mode: Indicates if both CAN are used
- * nofltrCANslave: Number of filter for CAN2 as slave
- * nofltrArray: Number of filters to configure
- */
-void CANx_Init(CAN_Handler *canBus, CAN_FilterTypeDef *fltr, CAN_DualFilterID_n_MaskTypeDef * fltr_ID2_Mask2, CAN_BitTimingTypeDef *tq, bool dual_mode, uint8_t nofltrCANslave,  uint8_t nofltrArray){
-
-	if(dual_mode){
-		SET_BIT(RCC_APB1ENR , RCC_APB1ENR_CAN1EN | RCC_APB1ENR_CAN2EN);
-	}
-	else{//One BusCan used
-		if(canBus->Register==CAN1){
-			SET_BIT(RCC_APB1ENR , RCC_APB1ENR_CAN1EN);
-
-		}
-		else if(canBus->Register==CAN2){
-			SET_BIT(RCC_APB1ENR , RCC_APB1ENR_CAN2EN);
-		}
-	}
-
+void CANx_SetMCRPred(CAN_Handler *canBus){
 	SET_BIT(canBus->Register->MCR, CAN_MCR_RESET);//Reset
 	CANx_WaitResetFlag(&(canBus->Register->MSR), CAN_MCR_RESET);//Wait for confirmation
 
@@ -58,8 +39,31 @@ void CANx_Init(CAN_Handler *canBus, CAN_FilterTypeDef *fltr, CAN_DualFilterID_n_
 	CLEAR_BIT(canBus->Register->MCR, CAN_MCR_TTCM);//Time Triggered Communication mode disabled.
 	CLEAR_BIT(canBus->Register->MCR, CAN_MCR_RESET);//Normal operation.
 	CLEAR_BIT(canBus->Register->MCR, CAN_MCR_DBF);//CAN working during debug
+}
 
-	//---------------------------------------------CAN2 Initialization Here---------------------------------------------------
+/*
+ * dual_mode: Indicates if both CAN are used
+ * nofltrCANslave: Number of filter for CAN2 as slave
+ * nofltrArray: Number of filters to configure
+ */
+void CANx_Init(CAN_Handler *canBus, CAN_FilterTypeDef *fltr, CAN_DualFilterID_n_MaskTypeDef * fltr_ID2_Mask2, CAN_BitTimingTypeDef *tq, bool dual_mode, uint8_t nofltrCANslave,  uint8_t nofltrArray){
+
+	if(dual_mode){
+		SET_BIT(RCC_APB1ENR , RCC_APB1ENR_CAN1EN | RCC_APB1ENR_CAN2EN);
+		CANx_SetMCRPred(can2);
+		CANx_BitTiming(can2, tq);
+	}
+	else{//One BusCan used
+		if(canBus->Register==CAN1){
+			SET_BIT(RCC_APB1ENR , RCC_APB1ENR_CAN1EN);
+
+		}
+		else if(canBus->Register==CAN2){
+			SET_BIT(RCC_APB1ENR , RCC_APB1ENR_CAN2EN);
+		}
+	}
+
+	CANx_SetMCRPred(canBus);
 
 	CANx_BitTiming(canBus, tq);
 
@@ -67,6 +71,9 @@ void CANx_Init(CAN_Handler *canBus, CAN_FilterTypeDef *fltr, CAN_DualFilterID_n_
 
 	CLEAR_BIT(canBus->Register->MCR, CAN_MCR_INRQ);//Initialization request off
 	CANx_WaitResetFlag(&(canBus->Register->MSR), CAN_MSR_INAK);
+
+
+
 	CANStatus=CAN_NORMAL; //Normal mode operation
 
 }
@@ -140,13 +147,30 @@ void CANx_CfgFilters(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, CAN_DualFil
 
 	}
 	else{
-		SET_BIT(canBus->Register->FMR, ((28-nofltrCANslave)<<CAN_FMR_CAN2SB_Pos));//filters managed by can slave
+		SET_BIT(can2->Register->FMR, CAN_FMR_FINIT);//Initialization mode for the filters.
+		SET_BIT(canBus->Register->FMR, ((nofltrCANslave)<<CAN_FMR_CAN2SB_Pos));//filters managed by can1
+		SET_BIT(can2->Register->FMR, ((28-nofltrCANslave)<<CAN_FMR_CAN2SB_Pos));//filters managed by can2 slave
 	}
 
 	for (i = 0; i < nofltrArray; ++i) {
-		CANx_SetCfgFilter(canBus, &fltr[i], &fltr_ID2_Mask2[aux]);//Recorremos el arreglo de estructuras
-		if(fltr->indexFltr==fltr_ID2_Mask2->indexFltr){
+		aux=0;
+		while((fltr->indexFltr==fltr_ID2_Mask2->indexFltr)&&(aux<28)){
 			aux++;
+		}
+		if(aux>=28){
+			aux=0;
+		}
+		if(dual_mode){
+			if(i>=nofltrCANslave){
+				CANx_SetCfgFilter(can2, &fltr[i], &fltr_ID2_Mask2[aux]);//Recorremos el arreglo de estructuras
+			}
+			else{
+				CANx_SetCfgFilter(canBus, &fltr[i], &fltr_ID2_Mask2[aux]);//Recorremos el arreglo de estructuras
+			}
+
+		}
+		else{
+			CANx_SetCfgFilter(canBus, &fltr[i], &fltr_ID2_Mask2[aux]);//Recorremos el arreglo de estructuras
 		}
 	}
 
@@ -298,23 +322,26 @@ void CANx_TxData(CAN_Handler * canBus, CAN_TxandRxHeader_TypeDef * TxHeader){
 
 	TxHeader->RTR = CAN_TIxR_Data;//Aseguramos que será trama de datos
 
-	CANx_Tx(canBus, TxHeader);
+	if(CANx_GetTME(canBus, TxHeader->Index)){
+		CANx_Tx(canBus, TxHeader);
 
-	CANx_TxSuccess(&(canBus->Register->TSR), TxHeader->Index);
-	//Success
-	CANx_SetLEC(canBus);//Actualizamos el estado de error LEC
-
+		CANx_TxSuccess(&(canBus->Register->TSR), TxHeader->Index);
+		//Success
+		CANx_SetLEC(canBus);//Actualizamos el estado de error LEC
+	}
 }
 //Trama Remota
 void CANx_TxRemote(CAN_Handler * canBus, CAN_TxandRxHeader_TypeDef * TxHeader){
 
 	TxHeader->RTR = CAN_TIxR_Remote;//Aseguramos que será trama remota
 
-	CANx_Tx(canBus, TxHeader);
+	if(CANx_GetTME(canBus, TxHeader->Index)){
+		CANx_Tx(canBus, TxHeader);
 
-	CANx_TxSuccess(&(canBus->Register->TSR), TxHeader->Index);
-	//Success
-	CANx_SetLEC(canBus);//Actualizamos el estado de error LEC
+		CANx_TxSuccess(&(canBus->Register->TSR), TxHeader->Index);
+		//Success
+		CANx_SetLEC(canBus);//Actualizamos el estado de error LEC
+	}
 
 }
 
@@ -381,9 +408,15 @@ uint8_t CANx_RxFIFO1(CAN_Handler * canBus, CAN_TxandRxHeader_TypeDef * RxData){
 }
 
 void CANx_BusOffRecovery(CAN_Handler * canBus){//Bit TEC>255
-	if(CANx_GetError(canBus, CAN_ESR_BOFF)){
+	//if(CANx_GetError(canBus, CAN_ESR_BOFF)){
+		SET_BIT(canBus->Register->MCR, CAN_MCR_INRQ);//Initialization request
+		CANx_WaitSetFlag(&(canBus->Register->MSR), CAN_MSR_INAK);//Wait for confirmation
+
 		SET_BIT(canBus->Register->MCR, CAN_MCR_ABOM);//SET ABOM: Recovering sequence automatic
-	}
+
+		CLEAR_BIT(canBus->Register->MCR, CAN_MCR_INRQ);//Initialization request off
+		CANx_WaitResetFlag(&(canBus->Register->MSR), CAN_MSR_INAK);
+	//}
 }
 
 void CANx_CallBackRX0(CAN_Handler *can){
@@ -419,6 +452,8 @@ void CANx_CallBackRX1(CAN_Handler *can){
 }
 
 void CANx_CallBackSCE(CAN_Handler *can){
+
+	CLEAR_BIT(can->Register->MSR, CAN_MSR_ERRI);//Clear ERRI bit
 
 	if(CANx_GetError(can, CAN_ESR_BOFF)){
 		CANStatus=CAN_ESR_BOFF;//TEC or REC >= 255
@@ -579,6 +614,22 @@ void CANx_EnSleepInt(CAN_Handler * canBus){
 
 void CANx_DisSleepInt(CAN_Handler * canBus){
 	CLEAR_BIT(canBus->Register->IER, CAN_IER_SLKIE);
+}
+
+uint8_t CANx_GetTME(CAN_Handler * canBus, uint8_t index){
+	uint8_t value;
+
+	if(index==0){
+		value = (canBus->Register->TSR & CAN_TSR_TME0)>>CAN_TSR_TME0_Pos;
+	}
+	else if(index==1){
+		value = (canBus->Register->TSR & CAN_TSR_TME1)>>CAN_TSR_TME0_Pos;
+	}
+	else if(index==2){
+		value = (canBus->Register->TSR & CAN_TSR_TME2)>>CAN_TSR_TME0_Pos;
+	}
+
+	return value;
 }
 
 uint32_t CANx_GetError(CAN_Handler * canBus, uint32_t bitReg){
