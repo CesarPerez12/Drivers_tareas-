@@ -44,10 +44,11 @@ int main(void)
 	SystClock_Init(2,1,80,1,0,0);//SYSCLK -> PLLP, SYSPLL -> HSI, SYSCLK -> 80MHz, preAHB1 -> divided by 2^1
 	//preAPB1 -> Not divided, preAPB2 -> not divided, APB1 = 40MHZ, APB2=40MHz.
 
+	//Apuntadores a direcciones de memoria de estructuras
 	can1=&can;
 	can2=&Can2;
-	ptrRx=&RxData;//Apunta a dirección de memoria
-	ptrTx=&TxHeader;//Apuntado a direcciones de memoria
+	ptrRx=&RxData;
+	ptrTx=&TxHeader;
 	//CAN1Tx=true;//Indica transmisión a la interrupción
 
 	CANx_GPIO(GPIOB,8);//CAN RX
@@ -55,10 +56,10 @@ int main(void)
 
 	CANx_SetParFLTR(&FLTR[0], 0, CAN_FS1R_D16, 0x0, 0x3, 0x0, 0x1, CAN_FM1R_MaskMode,
 			CAN_FFA1R_FIFO1, true);
-	/*0->Filter 0; CAN_FS1R_D16->16 bits scale; 0x0->IDL,  0x3->IDH;  0x0->MaskL,  0x3->MaskH;
+	/*0->Filter 0; CAN_FS1R_D16->16 bits scale; 0x0->IDL,  0x3->IDH;  0x0->MaskL,  0x1->MaskH;
 	CAN_FM1R_MaskMode-> ID in mask mode; CAN_FFA1R_FIFO0-> assigned to FIFO 0, true->Extended ID*/
 	CANx_SetParDualFLTR(&dualFLTR[0], false, 0, 0x8000, 0x1, 0x8000, 0x1);//Only used in Dual Mode Filter
-	/*false->Standard ID; 0->Filter 0; 0x1->IDL,  0x0->IDH;  0x0->MaskL,  0x1->MaskH */
+	/*false->Standard ID; 0->Filter 0; 0x80000->IDL,  0x1->IDH;  0x8000->MaskL,  0x1->MaskH */
 	//CANx_SetParFLTR(&FLTR[1], 1, CAN_FS1R_D16, 1200, 1201, 0xFFFF, 0xFFFF, CAN_FM1R_MaskMode, CAN_FFA1R_FIFO1);
 
 	//Time quanta Parameters
@@ -66,8 +67,8 @@ int main(void)
 	tq.kbps = 1000000;//1Mbps
 	tq.SJW = 0;//SJW=1
 
-	CANx_Init(&can, FLTR, dualFLTR, &tq, false, 0, 1);//can struct; array of sturct FLTR; tq struct; false->No dual mode; 0->Number of filter for CAN2;
-	//3->Number of filters to configure
+	CANx_Init(&can, FLTR, dualFLTR, &tq, false, 0, 1);//can struct; array of sturct FLTR; array of dualFLTR; tq struct;
+	//false->No dual mode; 0->Number of filter for CAN2 slave; 1->Number of filters to configure
 
 	//NVIC_SetCFGR(CAN1_Tx_IRQ, 3);//Enable Tx Int
 	//NVIC_SetCFGR(CAN1_Rx0_IRQ, 4);//Enable Rx0 Int
@@ -82,6 +83,7 @@ int main(void)
 
 		/*Code for polling*/
 		//CANx_SetTxHeader(&TxHeader, 0x10000, true, 8, CAN_TIxR_Data, dato, dato, 0);
+		//0x10000-> ID Tx; true -> Identifier Extended; 8 -> Data Length ; dato -> DataH; dato ->DataL; 0 -> Index Mailbox Tx
 		//CANx_BusOffRecovery(&can);//Enters in recovery mode
 		for (i = 0; i < 100000000; ++i);// Retardo
 		//CANx_EnSECInts(&can);//Colocar la interrupción cuando todo esté conectado correctamente
