@@ -58,8 +58,8 @@ int main(void)
 			CAN_FFA1R_FIFO1, true);
 	/*0->Filter 0; CAN_FS1R_D16->16 bits scale; 0x0->IDL,  0x3->IDH;  0x0->MaskL,  0x1->MaskH;
 	CAN_FM1R_MaskMode-> ID in mask mode; CAN_FFA1R_FIFO0-> assigned to FIFO 0, true->Extended ID*/
-	CANx_SetParDualFLTR(&dualFLTR[0], false, 0, 0x8000, 0x1, 0x8000, 0x1);//Only used in Dual Mode Filter
-	/*false->Standard ID; 0->Filter 0; 0x80000->IDL,  0x1->IDH;  0x8000->MaskL,  0x1->MaskH */
+	CANx_SetParDualFLTR(&dualFLTR[0], false, 0, 0x12, 0x0, 0x12, 0x0);//Only used in Dual Mode Filter
+	/*false->Standard ID; 0->Filter 0; 0x12->IDL,  0x0->IDH;  0x12->MaskL,  0x0->MaskH */
 	//CANx_SetParFLTR(&FLTR[1], 1, CAN_FS1R_D16, 1200, 1201, 0xFFFF, 0xFFFF, CAN_FM1R_MaskMode, CAN_FFA1R_FIFO1);
 
 	//Time quanta Parameters
