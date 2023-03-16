@@ -188,7 +188,7 @@ void CANx_CfgFilters(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, CAN_DualFil
 }
 
 /*
- * kbps Data bit rate Kilobits/seg
+ * bps Data bit rate Kilobits/seg
  * ntq number of time quanta
  * SJW value for resynchronization
  */
@@ -204,16 +204,16 @@ bool CANx_BitTiming(CAN_Handler * canBus, CAN_BitTimingTypeDef *tq){
 		tq->ntq = 25; //Colocamos el máximo valor por defecto
 	}
 
-	if(tq->kbps>1000000){//Máxima tasa de transferencia 1Mbps CAN 2.0
-		tq->kbps = 1000000; //1Mbps
+	if(tq->bps>1000000){//Máxima tasa de transferencia 1Mbps CAN 2.0
+		tq->bps = 1000000; //1Mbps
 	}
 
-	fq = tq->kbps * tq->ntq;//Calculando frecuencia del tiempo cuántico
+	fq = tq->bps * tq->ntq;//Calculando frecuencia del tiempo cuántico
 	BRP = ((currentAHB1CLK*1000000) / (fq));//Baud rate prescaler
 
 	fq = ((currentAHB1CLK*1000000)/BRP) / (tq->ntq);//Rehusamos variable para calcular el tiempo total de 1 bit
 
-	while((fq>(tq->kbps)||(fq!=tq->kbps))&&(BRP<=1023)){
+	while((fq>(tq->bps)||(fq!=tq->bps))&&(BRP<=1023)){
 		(tq->ntq)++;//Incrementamos el tiempo cuántico
 		fq = ((currentAHB1CLK*1000000)/BRP) / (tq->ntq);//Rehusamos variable para calcular el tiempo total de 1 bit
 		if(tq->ntq > 25){//Supera el máximo número de tiempo de cuantización
@@ -224,9 +224,9 @@ bool CANx_BitTiming(CAN_Handler * canBus, CAN_BitTimingTypeDef *tq){
 
 	nt1t2 = tq->ntq - 1;//Calculamos el número total de tiempos cuánticos
 
-	if(fq!=tq->kbps){//Si no hay coincidencia se busca un valor cercano
+	if(fq!=tq->bps){//Si no hay coincidencia se busca un valor cercano
 		BRP = ((currentAHB1CLK*1000000) / (fq));//Baud rate prescaler
-		while(fq>(tq->kbps)){//Comparamos si la tasa de bits es mayor al deseado
+		while(fq>(tq->bps)){//Comparamos si la tasa de bits es mayor al deseado
 			(tq->ntq)++;//Incrementamos el tiempo cuántico
 			fq = ((currentAHB1CLK*1000000)/BRP) / (tq->ntq);//Rehusamos variable para calcular el tiempo total de 1 bit
 			if(tq->ntq > 25){//Supera el máximo número de tiempo de cuantización

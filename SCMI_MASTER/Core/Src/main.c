@@ -64,7 +64,7 @@ int main(void)
 
 	//Time quanta Parameters
 	tq.ntq = 20;//20 times for 40MHz
-	tq.kbps = 1000000;//1Mbps
+	tq.bps = 1000000;//1Mbps
 	tq.SJW = 0;//SJW=1
 
 	CANx_Init(&can, FLTR, dualFLTR, &tq, false, 0, 1);//can struct; array of sturct FLTR; array of dualFLTR; tq struct;

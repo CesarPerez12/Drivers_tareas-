@@ -39,7 +39,7 @@ extern uint8_t CANStatus;
 #define CAN_BASE    0x40006400
 
 typedef struct{
-	uint32_t  kbps;
+	uint32_t  bps;
 	uint8_t   ntq;
 	uint8_t   SJW;
 }CAN_BitTimingTypeDef;
