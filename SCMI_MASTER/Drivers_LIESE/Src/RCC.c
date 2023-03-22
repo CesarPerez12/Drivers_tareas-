@@ -37,7 +37,7 @@ bool SystClock_Init(uint8_t sourceSYS, uint8_t sourcePLL, uint8_t SYSCLK, uint8_
 			SystCLK_SetHSION();
 		}
 		else{//HSE
-			currentSYSCLK=HSECLK;//16MHz
+			currentSYSCLK=HSECLK;//8MHz
 			RCC_CFGR = RCC_CFGR_SW_HSE; //HSE como fuente del sistema
 			SystCLK_SetPres(preAHB1, preAPB1, preAPB2);
 			SystCLK_SetHSEON();

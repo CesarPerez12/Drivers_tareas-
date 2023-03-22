@@ -898,6 +898,8 @@ typedef struct
 #define GPIO_AFRH_AFRH7_3                GPIO_AFRH_AFSEL15_3
 
 //Simplified Definitions
+#define GPIO_MODER_INPUT				(0U)
+#define GPIO_MODER_OUTPUT				(1U)
 #define GPIO_OTYPER_PP                   0UL //Push pull
 #define GPIO_OTYPER_OD                   1UL //Open Drain
 #define GPIO_OSPEEDR_0                   0UL //
@@ -921,5 +923,6 @@ typedef struct
 #define TIM14_AFR_AF3                    (9U) //AF=9
 
 void GPIOx_InitAF(GPIO_TypeDef *Port_, uint8_t Pin_, uint8_t OTYPER_, uint8_t OSPEEDR_, uint8_t AFR_ );
+void GPIOx_InitIO(GPIO_TypeDef *Port_, uint8_t Pin_, uint8_t IO, bool PUR);
 void RCC_EnPort(GPIO_TypeDef *port);
 #endif /* GPIOX_H_ */

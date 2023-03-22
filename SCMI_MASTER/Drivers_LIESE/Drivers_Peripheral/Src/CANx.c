@@ -52,6 +52,11 @@ void CANx_Init(CAN_Handler *canBus, CAN_FilterTypeDef *fltr, CAN_DualFilterID_n_
 	if(dual_mode){//Use both CAN
 		if(canBus->Register==CAN2){//Aseguramos configuración de ambos CAN en dual
 			canBus->Register = CAN1;//Cambiamos los registros de CAN2 a CAN1
+			can2->Register = CAN2;
+		}
+		else if(can2->Register!=CAN2){
+			canBus->Register = CAN1;//Cambiamos los registros de CAN2 a CAN1
+			can2->Register = CAN2;
 		}
 		SET_BIT(RCC_APB1ENR , RCC_APB1ENR_CAN1EN | RCC_APB1ENR_CAN2EN);//Habilita reloj
 		CANx_SetMCRPred(can2);//Configure MCR register
@@ -156,30 +161,20 @@ void CANx_CfgFilters(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, CAN_DualFil
 	}
 	else{//Configura los dos módulos CAN
 		SET_BIT(can2->Register->FMR, CAN_FMR_FINIT);//Initialization mode for the filters.
+		CLEAR_BIT(canBus->Register->FMR, (CAN_FMR_CAN2SB));//Clear
 		SET_BIT(canBus->Register->FMR, ((nofltrCANslave)<<CAN_FMR_CAN2SB_Pos));//filters managed by can1
-		SET_BIT(can2->Register->FMR, ((28-nofltrCANslave)<<CAN_FMR_CAN2SB_Pos));//filters managed by can2 slave
 	}
 
 	for (i = 0; i < nofltrArray; ++i) {
 		aux=0;
-		while((fltr->indexFltr!=fltr_ID2_Mask2->indexFltr)&&(aux<28)){//Busca coincidencia de Filtros para modo dual de 16 bits
+		while((fltr[i].indexFltr!=fltr_ID2_Mask2[aux].indexFltr)&&(aux<28)){//Busca coincidencia de Filtros para modo dual de 16 bits
 			aux++;
 		}
 		if(aux>=28){//Reinicia cuenta
 			aux=0;
 		}
-		if(dual_mode){//Modo dual de CAN
-			if(i>=nofltrCANslave){
-				CANx_SetCfgFilter(can2, &fltr[i], &fltr_ID2_Mask2[aux]);//Recorremos el arreglo de estructuras y configuramos
-			}
-			else{
-				CANx_SetCfgFilter(canBus, &fltr[i], &fltr_ID2_Mask2[aux]);//Recorremos el arreglo de estructuras y configuramos
-			}
-
-		}
-		else{//Un solo CAN
-			CANx_SetCfgFilter(canBus, &fltr[i], &fltr_ID2_Mask2[aux]);//Recorremos el arreglo de estructuras y configuramos
-		}
+		CANx_SetCfgFilter(canBus, &fltr[i], &fltr_ID2_Mask2[aux]);//Recorremos el arreglo de estructuras y configuramos
+		CANx_SetCfgFilter(can2, &fltr[i], &fltr_ID2_Mask2[aux]);//Recorremos el arreglo de estructuras y configuramos
 	}
 	if(dual_mode){
 		CLEAR_BIT(can2->Register->FMR, CAN_FMR_FINIT);//Initialization mode off
