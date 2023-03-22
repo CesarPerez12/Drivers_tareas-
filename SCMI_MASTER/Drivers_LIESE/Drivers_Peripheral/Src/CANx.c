@@ -174,7 +174,6 @@ void CANx_CfgFilters(CAN_Handler * canBus, CAN_FilterTypeDef * fltr, CAN_DualFil
 			aux=0;
 		}
 		CANx_SetCfgFilter(canBus, &fltr[i], &fltr_ID2_Mask2[aux]);//Recorremos el arreglo de estructuras y configuramos
-		CANx_SetCfgFilter(can2, &fltr[i], &fltr_ID2_Mask2[aux]);//Recorremos el arreglo de estructuras y configuramos
 	}
 	if(dual_mode){
 		CLEAR_BIT(can2->Register->FMR, CAN_FMR_FINIT);//Initialization mode off
