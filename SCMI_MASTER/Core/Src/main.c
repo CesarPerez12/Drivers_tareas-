@@ -182,6 +182,6 @@ void CANx_SetTxHeader(
 
 void Delay(uint32_t time){
 	uint32_t load = 0, i = 0;
-	load = (SYS_CLK.AHB1CLK * time) / 8;//1MHz*1us = 1s
+	load = (SYS_CLK.AHB1CLK * time) / 14;//1MHz*1us = 1s; 14 instrucciones para un ciclo de for
 	for (i = 0; i < load; ++i);
 }
