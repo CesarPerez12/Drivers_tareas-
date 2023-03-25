@@ -193,6 +193,7 @@ bool CANx_BitTiming(CAN_Handler * canBus, CAN_BitTimingTypeDef *tq){
 	uint8_t nt1=0, nt2=0; //Segment 1 and segment 2. Maximum value Segment 2: Value programmable (8-1)=7
 	uint32_t fq ;//fq=1/tq -> tq = tbits/ntq
 	uint16_t BRP ;//(ClockFreq/fq) - 1
+	uint8_t APB1 = SYS_CLK.APB1CLK;
 
 	if(tq->ntq > 25){//Supera el máximo número de tiempo de cuantización
 		tq->ntq = 25; //Colocamos el máximo valor por defecto
@@ -203,13 +204,13 @@ bool CANx_BitTiming(CAN_Handler * canBus, CAN_BitTimingTypeDef *tq){
 	}
 
 	fq = tq->bps * tq->ntq;//Calculando frecuencia del tiempo cuántico
-	BRP = ((currentAHB1CLK*1000000) / (fq));//Baud rate prescaler
+	BRP = ((APB1*1000000) / (fq));//Baud rate prescaler
 
-	fq = ((currentAHB1CLK*1000000)/BRP) / (tq->ntq);//Rehusamos variable para calcular el tiempo total de 1 bit
+	fq = ((APB1*1000000)/BRP) / (tq->ntq);//Rehusamos variable para calcular el tiempo total de 1 bit
 
 	while((fq>(tq->bps)||(fq!=tq->bps))&&(BRP<=1023)){
 		(tq->ntq)++;//Incrementamos el tiempo cuántico
-		fq = ((currentAHB1CLK*1000000)/BRP) / (tq->ntq);//Rehusamos variable para calcular el tiempo total de 1 bit
+		fq = ((APB1*1000000)/BRP) / (tq->ntq);//Rehusamos variable para calcular el tiempo total de 1 bit
 		if(tq->ntq > 25){//Supera el máximo número de tiempo de cuantización
 			tq->ntq = 1; //Colocamos el máximo valor por defecto
 			BRP++;
@@ -219,10 +220,10 @@ bool CANx_BitTiming(CAN_Handler * canBus, CAN_BitTimingTypeDef *tq){
 	nt1t2 = tq->ntq - 1;//Calculamos el número total de tiempos cuánticos
 
 	if(fq!=tq->bps){//Si no hay coincidencia se busca un valor cercano
-		BRP = ((currentAHB1CLK*1000000) / (fq));//Baud rate prescaler
+		BRP = ((APB1*1000000) / (fq));//Baud rate prescaler
 		while(fq>(tq->bps)){//Comparamos si la tasa de bits es mayor al deseado
 			(tq->ntq)++;//Incrementamos el tiempo cuántico
-			fq = ((currentAHB1CLK*1000000)/BRP) / (tq->ntq);//Rehusamos variable para calcular el tiempo total de 1 bit
+			fq = ((APB1*1000000)/BRP) / (tq->ntq);//Rehusamos variable para calcular el tiempo total de 1 bit
 			if(tq->ntq > 25){//Supera el máximo número de tiempo de cuantización
 				tq->ntq = 1; //Colocamos el máximo valor por defecto
 				BRP++;//Aumentamos el BRP

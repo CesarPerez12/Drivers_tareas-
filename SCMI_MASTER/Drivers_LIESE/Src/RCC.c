@@ -10,8 +10,8 @@
 #include "embeddedFLASH.h"
 #include "MacroFunctions.h"
 #include "GPIOx.h"
- uint8_t currentSYSCLK=0;
- uint8_t currentAHB1CLK=0;
+
+ RCC_CLKCFG SYS_CLK;//Variable a utilizar
 /*RCC es 16MHz de manera predeterminada
 //Configuración predeterminada RCC
 //PLLM: 0.95MHz-2.1MHz
@@ -24,41 +24,35 @@
  * APB1CLOCK = ( SYSCLOCK / PRE_AHB1 ) / APB1
  * APB1CLK in MHz
  */
-bool SystClock_Init(uint8_t sourceSYS, uint8_t sourcePLL, uint8_t SYSCLK, uint8_t preAHB1, uint8_t preAPB1, uint8_t preAPB2){
+bool SystClock_Init(RCC_CLKCFG *SYSCLKCFG, uint8_t sourceSYS, uint8_t sourcePLL, uint8_t preAHB1, uint8_t preAPB1, uint8_t preAPB2){
+	uint8_t SYSCLK = SYSCLKCFG->SYSCLK;
 	RCC_APB1ENR |= RCC_APB1ENR_PWREN;
 	PWR_CR &= (~(0x3<<PWR_CR_VOS_Pos));//Limpiamos
 	PWR_CR |= (1<<PWR_CR_VOS_Pos);//Selecciona modo 3 (120MHz Max)
-	if((sourceSYS>=0)&&(sourceSYS<2)){//Fuente SYSCLK HSI o HSE
-		//Se ignora sourcePLL y SYSCLK si se escoge directamente el valor de la fuentee
-		if(sourceSYS==0){//HSI
-			currentSYSCLK=HSICLK;//16MHz
-			RCC_CFGR = RCC_CFGR_SW_HSI; //HSI como fuente del sistema
-			SystCLK_SetPres(preAHB1, preAPB1, preAPB2);
-			SystCLK_SetHSION();
-		}
-		else{//HSE
-			currentSYSCLK=HSECLK;//8MHz
-			RCC_CFGR = RCC_CFGR_SW_HSE; //HSE como fuente del sistema
-			SystCLK_SetPres(preAHB1, preAPB1, preAPB2);
-			SystCLK_SetHSEON();
-		}
+	//Se ignora sourcePLL y SYSCLK si se escoge directamente el valor de la fuente
+	if(SYSCLK==HSICLK){//HSI
+		RCC_CFGR = RCC_CFGR_SW_HSI; //HSI como fuente del sistema
+		SystCLK_SetPres(SYSCLKCFG, preAHB1, preAPB1, preAPB2);
+		SystCLK_SetHSION();
 	}
-	else if((sourceSYS>=2)&&(sourceSYS<4)){
+	else if(SYSCLK==HSECLK){//HSE
+		RCC_CFGR = RCC_CFGR_SW_HSE; //HSE como fuente del sistema
+		SystCLK_SetPres(SYSCLKCFG, preAHB1, preAPB1, preAPB2);
+		SystCLK_SetHSEON();
+	}
+	else{
 		if((SYSCLK>=24)&&(SYSCLK<=180)){//Min out CLK 24MHz, max 180MHz, puede ser PLLP o PLLR
 			if(sourcePLL==0){//Source PLL -> HSI = 16 MHz, se trabajan números enteros
-				SystCLK_CalculatePLLCFGR(sourceSYS, HSICLK, 100*SYSCLK, preAHB1, preAPB1, preAPB2, 8);//Configura e inicializa
+				SystCLK_CalculatePLLCFGR(SYSCLKCFG, sourceSYS, HSICLK, preAHB1, preAPB1, preAPB2, 8);//Configura e inicializa
 			}
 			else{//Source PLL -> HSE
 				RCC_EnPort(GPIOH);
-				SystCLK_CalculatePLLCFGR(sourceSYS, HSECLK, 100*SYSCLK, preAHB1, preAPB1, preAPB2, 1);//Configura e inicializa
+				SystCLK_CalculatePLLCFGR(SYSCLKCFG, sourceSYS, HSECLK, preAHB1, preAPB1, preAPB2, 1);//Configura e inicializa
 			}
 		}
 		else{//Configuración predeterminada en PLL
 			SystCLK_SetPLLPredet();//SYS = 40MHz, APB1 = 10MHz
 		}
-	}
-	else{//Se selecciona configuración predeterminada
-		SystCLK_SetPLLPredet();//SYS = 40MHz, APB1 = 10MHz, HSI ON
 	}
 	return true;
 }
@@ -73,94 +67,117 @@ uint8_t Calculate_Pot2(uint8_t pot){
 	return value;
 }
 //
-void SystCLK_SetPres(uint8_t preAHB1, uint8_t preAPB1, uint8_t preAPB2){
-	uint8_t divAHB1 = currentSYSCLK / (Calculate_Pot2(preAHB1));
-	uint8_t divAPB1 = currentSYSCLK / (Calculate_Pot2(preAHB1+preAPB1));
-	uint8_t divAPB2 = currentSYSCLK / (Calculate_Pot2(preAHB1+preAPB2));;
+void SystCLK_SetPres(RCC_CLKCFG *SYSCLKCFG, uint8_t preAHB1, uint8_t preAPB1, uint8_t preAPB2){
+	uint8_t SYSCLK = SYSCLKCFG->SYSCLK;
+	uint8_t divAHB1 = (SYSCLK) / (Calculate_Pot2(preAHB1));
+	uint8_t divAPB1 = 0;//(SYSCLKCFG->SYSCLK) / (Calculate_Pot2(preAHB1+preAPB1));
+	uint8_t divAPB2 = 0;//(SYSCLKCFG->SYSCLK) / (Calculate_Pot2(preAHB1+preAPB2));
+	uint8_t i=0;
+	uint32_t decimal;
 
-	if(divAHB1>30){//Al trabajar con más de 50MHz en los periféricos se recomienda habilitar la configuración
-		if(divAHB1>=50){
-			RCC_APB2ENR |= RCC_APB2ENR_SYSCFGEN;//Revisa cap. 8 del manual rm009
-			SYSCFG_SetCMP_PD();
-			SYSCFG_WaitREADY();
-		}
-		currentAHB1CLK=divAHB1;
-		embbFLash_Conf(currentAHB1CLK);//Se configuran los ciclos de la memoria Flash
+	if((SYSCLK)&1){//Si es un número impar
+		SYSCLK++;//Lo hacemos Par
+		SYSCLKCFG->SYSCLK++;
+		divAHB1 = (SYSCLK) / (Calculate_Pot2(preAHB1));
 	}
 
-	if(divAHB1>=2){
-		if(currentSYSCLK&1){//Si es un número impar
-			//Dejamos valores enteros
-			RCC_CFGR |= (RCC_CFGR_HPRE_DIV1|RCC_CFGR_PPRE1_DIV1|RCC_CFGR_PPRE2_DIV1); //Dividir por 1 todo
+	if(divAHB1>=2){//Dentro del rango
+		if(preAHB1!=0){
+			RCC_CFGR |= ((7+preAHB1)<<RCC_CFGR_HPRE_Pos);
 		}
-		else{//número par
-			if((divAPB1>=2)&&(divAPB2>=2)){//Verificamos el rango del preescalador, si permite un valor mayor a 2MHz
-				if(preAHB1!=0){
-					RCC_CFGR |= ((7+preAHB1)<<RCC_CFGR_HPRE_Pos);
-				}
-			    if(preAPB1!=0){
-			    	RCC_CFGR |= ((3+preAPB1)<<RCC_CFGR_PPRE1_Pos);
-				}
-				if(preAPB2!=0){
-					RCC_CFGR |= ((3+preAPB2)<<RCC_CFGR_PPRE2_Pos);
-				}
-			}
-			else if((divAPB1>=2)&&(divAPB2<=2)){
-				if(preAHB1!=0){
-					RCC_CFGR |= ((7+preAHB1)<<RCC_CFGR_HPRE_Pos);
-				}
-			    if(preAPB1!=0){
-			    	RCC_CFGR |= ((3+preAPB1)<<RCC_CFGR_PPRE1_Pos);
-				}
-				RCC_CFGR |= (RCC_CFGR_PPRE2_DIV1);
-			}
-			else if((divAPB1<=2)&&(divAPB2>=2)){
-				if(preAHB1!=0){
-					RCC_CFGR |= ((7+preAHB1)<<RCC_CFGR_HPRE_Pos);
-				}
-			    if(preAPB2!=0){
-			    	RCC_CFGR |= ((3+preAPB2)<<RCC_CFGR_PPRE2_Pos);
-				}
-				RCC_CFGR |= (RCC_CFGR_PPRE1_DIV1);
-			}
-			else{
-				if(preAHB1!=0){
-					RCC_CFGR |= ((7+preAHB1)<<RCC_CFGR_HPRE_Pos);
-				}
-				RCC_CFGR |= (RCC_CFGR_PPRE1_DIV1|RCC_CFGR_PPRE2_DIV1); //Dividir por 1 preescaladores APB1 y APB2
-			}
-		}
+		SYSCLKCFG->AHB1CLK = divAHB1;
 	}
 	else{
-		RCC_CFGR |= (RCC_CFGR_HPRE_DIV1|RCC_CFGR_PPRE1_DIV1|RCC_CFGR_PPRE2_DIV1); //Dividir por 1 todo
+		RCC_CFGR |= (RCC_CFGR_HPRE_DIV1);//Dividir por 1 AHB1
+		SYSCLKCFG->AHB1CLK = SYSCLK;
+		preAHB1 = 0;
 	}
+
+	//Calculamos nuevos valores
+	divAPB1 = (SYSCLK) / (Calculate_Pot2(preAHB1+preAPB1));
+	divAPB2 = (SYSCLK) / (Calculate_Pot2(preAHB1+preAPB2));
+
+	if((divAPB1>=2)&&(divAPB1<=45)){
+	    if(preAPB1!=0){
+	    	RCC_CFGR |= ((3+preAPB1)<<RCC_CFGR_PPRE1_Pos);
+		}
+	    decimal = (((uint32_t)(divAPB1))*100) - ((100*(SYSCLK)) / (Calculate_Pot2(preAHB1+preAPB1)));
+		SYSCLKCFG->APB1CLK = divAPB1;
+	}
+	else{
+		i=0;
+		while((divAPB1<=45)||(i>=5)) {
+			divAPB1 = (SYSCLK) / (Calculate_Pot2(i+preAHB1));
+		}
+		if(i!=0){
+			RCC_CFGR |= ((3+i)<<RCC_CFGR_PPRE1_Pos);
+		}
+		decimal = (((uint32_t)(divAPB1))*100) - ((100*(SYSCLK)) / (Calculate_Pot2(preAHB1+i)));
+		SYSCLKCFG->APB1CLK = divAPB1;
+	}
+
+	if((divAPB2>=2)&&(divAPB2<=45)){
+		if(preAPB2!=0){
+			RCC_CFGR |= ((3+preAPB2)<<RCC_CFGR_PPRE2_Pos);
+		}
+		decimal = (((uint32_t)(divAPB2))*100) - ((100*(SYSCLK)) / (Calculate_Pot2(preAHB1+preAPB2)));
+		SYSCLKCFG->APB2CLK = divAPB2;
+	}
+	else{
+		i=0;
+		while((divAPB2<=45)||(i>=5)) {
+			divAPB2 = (SYSCLK) / (Calculate_Pot2(i+preAHB1));
+		}
+		if(i!=0){
+			RCC_CFGR |= ((3+i)<<RCC_CFGR_PPRE2_Pos);
+		}
+		decimal = (((uint32_t)(divAPB2))*100) - ((100*(SYSCLK)) / (Calculate_Pot2(preAHB1+i)));
+		SYSCLKCFG->APB1CLK = divAPB2;
+	}
+
+	if(decimal){
+		SYSCLKCFG->precision = false;
+	}
+	else{
+		SYSCLKCFG->precision = true;
+	}
+
+	//Al trabajar con más de 50MHz en los periféricos se recomienda habilitar la configuración
+	if(divAHB1>=50){
+		RCC_APB2ENR |= RCC_APB2ENR_SYSCFGEN;//Revisa cap. 8 del manual rm009
+		SYSCFG_SetCMP_PD();
+		SYSCFG_WaitREADY();
+	}
+
+	embbFLash_Conf(SYSCLKCFG->AHB1CLK);//Se configuran los ciclos de la memoria Flash
 }
 
 void SystCLK_SetHSION(){
 	RCC_CR = ((0x10<<RCC_CR_HSITRIM_Pos)|(0x68<<RCC_CR_HSICAL_Pos));//Configuración Para calibración
-	RCC_CR |= (RCC_CR_HSION|(0x68<<RCC_CR_HSICAL_Pos));
+	RCC_CR |= (RCC_CR_HSION);
 	while((RCC_CR&&RCC_CR_HSIRDY)==0);
 }
 
 void SystCLK_SetHSEON(){
-	RCC_CR = (RCC_CR_HSEON|RCC_CR_HSEBYP|(0x68<<RCC_CR_HSICAL_Pos));
+	RCC_CR = (RCC_CR_HSEON);
 	while((RCC_CR&&RCC_CR_HSERDY)==0);
 }
 
 void SystCLK_SetPLLON(uint8_t sourcePLL){
 	if(sourcePLL==1){
-		RCC_CR = (RCC_CR_PLLON|RCC_CR_HSEON|RCC_CR_HSEBYP|(0x68<<RCC_CR_HSICAL_Pos));//|RCC_CR_HSEON|RCC_CR_HSEBYP);//PLL ON, HSE ON, HSE-> Osc. PLL
+		RCC_CR = (RCC_CR_PLLON|RCC_CR_HSEON);//PLL ON, HSE ON, HSE-> Osc. PLL
 	}
 	else{
 		RCC_CR = ((0x10<<RCC_CR_HSITRIM_Pos)|(0x68<<RCC_CR_HSICAL_Pos));//Configuración Para calibración
-		RCC_CR |= (RCC_CR_PLLON|RCC_CR_HSION|(0x68<<RCC_CR_HSICAL_Pos));//|RCC_CR_HSEON|RCC_CR_HSEBYP);//PLL ON, HSI ON, HSI-> Osc. PLL
+		RCC_CR |= (RCC_CR_PLLON|RCC_CR_HSION);//PLL ON, HSI ON, HSI-> Osc. PLL
 	}
 	while((RCC_CR&&RCC_CR_PLLRDY)==0);
 
 }
 //
-void SystCLK_CalculatePLLCFGR(uint8_t sourceSYS, uint8_t PLLCLK, uint16_t SYSCLK,uint8_t preAHB1, uint8_t preAPB1, uint8_t preAPB2, uint8_t up){
+void SystCLK_CalculatePLLCFGR(RCC_CLKCFG *SYSCLKCFG, uint8_t sourceSYS, uint8_t PLLCLK,uint8_t preAHB1, uint8_t preAPB1, uint8_t preAPB2, uint8_t up){
 	uint32_t auxClk = 0 ;
+	uint16_t SYSCLK = 100*(SYSCLKCFG->SYSCLK);
 	uint8_t PLLM_ = 0, PLL_P_R_ = 2;
 	uint16_t PLLN_ = 50;
 	if(up!=8){
@@ -176,7 +193,7 @@ void SystCLK_CalculatePLLCFGR(uint8_t sourceSYS, uint8_t PLLCLK, uint16_t SYSCLK
 		PLLN_=50;
 		auxClk =  ( (100*PLLCLK) / (PLLM_)) * PLLN_ ;
 		PLLN_=SystCLK_GetPLLNStart(auxClk,PLLCLK, PLLM_, PLLN_);//Obtiene el valor de PLLN inicial
-		while((PLLN_<=432)&&(auxClk!=SYSCLK)){
+		while((PLLN_<=432)&&(auxClk!=SYSCLK)&&(auxClk<=43200)){
 			if(((auxClk/7)<SYSCLK)||((auxClk/8)<SYSCLK)){
 				PLL_P_R_=2;//PLLP o PLLR
 				auxClk /= PLL_P_R_;
@@ -204,20 +221,20 @@ void SystCLK_CalculatePLLCFGR(uint8_t sourceSYS, uint8_t PLLCLK, uint16_t SYSCLK
 	}
 
 	if((auxClk!=SYSCLK)&&(PLL_P_R_>8)&&(PLLM_>PLLCLK)&&(PLLN_>432)){//No se ecnontró un valor adecuado
-		SystCLK_SetPLLPredet(); //SYS = 40MHz, APB1 = 10MHz
-		currentSYSCLK = 40;
+		SystCLK_SetPLLPredet(); //SYS = 80MHz, APB1, APB2 = 40MHz
+		SYSCLKCFG->SYSCLK = 80;
 	}
 	else{//Se llenan los valores
-		currentSYSCLK = auxClk/100;
+		SYSCLKCFG->SYSCLK = auxClk/100;
 		if(sourceSYS==2){//PLLP como fuente del sistema
 			PLL_P_R_= ( (PLL_P_R_/2) - 1 );//
 			RCC_CFGR = RCC_CFGR_SW_PLL;
-			SystCLK_SetPres(preAHB1, preAPB1, preAPB2);
+			SystCLK_SetPres(SYSCLKCFG, preAHB1, preAPB1, preAPB2);
 			RCC_PLLCFGR = ((PLLM_<<RCC_PLLCFGR_PLLM_Pos)|(PLLN_<<RCC_PLLCFGR_PLLN_Pos)|(PLL_P_R_<<RCC_PLLCFGR_PLLP_Pos)|RCC_PLLCFGR_PLLQ_1|RCC_PLLCFGR_PLLR_1);//Configurar antes de activar
 		}
 		else{//PLLR como fuente del sistema
 			RCC_CFGR = RCC_CFGR_SW_PLLR;
-			SystCLK_SetPres(preAHB1, preAPB1, preAPB2);
+			SystCLK_SetPres(SYSCLKCFG, preAHB1, preAPB1, preAPB2);
 			RCC_PLLCFGR = ((PLLM_<<RCC_PLLCFGR_PLLM_Pos)|(PLLN_<<RCC_PLLCFGR_PLLN_Pos)|(PLL_P_R_<<RCC_PLLCFGR_PLLR_Pos)|RCC_PLLCFGR_PLLQ_1|RCC_PLLCFGR_PLLR_1);//Configurar antes de activar
 		}
 		if(PLLCLK==HSECLK){//HSE PLL SOURCE
@@ -272,9 +289,11 @@ uint8_t SystCLK_CalculatePLL_P_R(uint32_t freq_100, uint8_t valueCLK, uint16_t S
 }
 //
 void SystCLK_SetPLLPredet(){
-	RCC_CFGR = (RCC_CFGR_SW_PLL|RCC_CFGR_HPRE_DIV1|RCC_CFGR_PPRE1_DIV4|RCC_CFGR_PPRE2_DIV1) ;//SW = PLLP Source, AHB=1, APB1=4, APB2=1, APB1 Source 10MHz para I2C
-	RCC_PLLCFGR = (RCC_PLLCFGR_PLLSRC_HSI|RCC_PLLCFGR_PLLM_4|(160<<RCC_PLLCFGR_PLLN_Pos)|(1<<RCC_PLLCFGR_PLLP_Pos)|RCC_PLLCFGR_PLLQ_1|RCC_PLLCFGR_PLLR_1);//PLL source = HSI, PLLM = 16, PLLN = 160, PLLP = 4. SYS = 40 MHz; configurar antes de activar
-	SystCLK_SetPLLON(0);
+	RCC_CFGR = (RCC_CFGR_SW_PLL|RCC_CFGR_HPRE_DIV1|RCC_CFGR_PPRE1_DIV2|RCC_CFGR_PPRE2_DIV2) ;//SW = PLLP Source, AHB=1, APB1=2, APB2=2, APB1 Source 40MHz para I2C
+	RCC_PLLCFGR = (RCC_PLLCFGR_PLLM_1|(80<<RCC_PLLCFGR_PLLN_Pos)|(1<<RCC_PLLCFGR_PLLP_Pos)|RCC_PLLCFGR_PLLQ_1|RCC_PLLCFGR_PLLR_1);//PLL source = HSE, PLLM =80 , PLLN = 40, PLLP = 4. SYS = 80 MHz; configurar antes de activar
+	RCC_PLLCFGR |= RCC_PLLCFGR_PLLSRC_HSE;
+	embbFLash_Conf(80);//Se configuran los ciclos de la memoria Flash
+	SystCLK_SetPLLON(1);
 }
 
 
