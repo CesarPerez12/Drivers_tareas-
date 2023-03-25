@@ -45,7 +45,7 @@ int main(void)
 
 	SYS_CLK.SYSCLK = 80;
 	//Los prescaladores se seleccionan por n=1,2,...,8. Siendo 2^n el valor del preescalador
-	SystClock_Init(&SYS_CLK,2,1,1,0,0);//SYSCLK -> PLLP, SYSPLL -> HSI, preAHB1 -> divided by 2^1
+	SystClock_Init(&SYS_CLK,2,1,0,1,2);//SYSCLK -> PLLP, SYSPLL -> HSI, preAHB1 -> divided by 2^1
 	//preAPB1 -> Not divided, preAPB2 -> not divided, APB1 = 40MHZ, APB2=40MHz.
 
 	//Apuntadores a direcciones de memoria de estructuras
@@ -75,8 +75,6 @@ int main(void)
 	tq.ntq = 18;//20 times for 40MHz
 	tq.bps = 1000000;//1Mbps
 	tq.SJW = 0;//SJW=1
-
-	Delay(10000000);//10000000us
 
 	CANx_Init(&can, FLTR, dualFLTR, &tq, false, 0, 1);//can struct; array of sturct FLTR; array of dualFLTR; tq struct;
 	//false->No dual mode; 0->Number of filter for CAN2 slave; 1->Number of filters to configure

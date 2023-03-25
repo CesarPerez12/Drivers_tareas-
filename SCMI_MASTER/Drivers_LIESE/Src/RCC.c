@@ -81,6 +81,10 @@ void SystCLK_SetPres(RCC_CLKCFG *SYSCLKCFG, uint8_t preAHB1, uint8_t preAPB1, ui
 		divAHB1 = (SYSCLK) / (Calculate_Pot2(preAHB1));
 	}
 
+	if(preAHB1>4){
+		divAHB1 = (SYSCLK) / (Calculate_Pot2(preAHB1+1));
+	}
+
 	if(divAHB1>=2){//Dentro del rango
 		if(preAHB1!=0){
 			RCC_CFGR |= ((7+preAHB1)<<RCC_CFGR_HPRE_Pos);
