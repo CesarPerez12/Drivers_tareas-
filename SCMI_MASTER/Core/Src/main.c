@@ -72,7 +72,7 @@ int main(void)
 			//CAN_FFA1R_FIFO0, true);
 	//CANx_SetParDualFLTR(&dualFLTR[1], false, 18, 0x8, 0x8, 0x8, 0x8);
 	//Time quanta Parameters
-	tq.ntq = 18;//20 times for 40MHz
+	tq.ntq = 20;//20 times for 40MHz
 	tq.bps = 1000000;//1Mbps
 	tq.SJW = 0;//SJW=1
 
@@ -99,7 +99,7 @@ int main(void)
 
 		/*Code for polling*/
 		if((GPIOC->IDR&GPIO_IDR_ID13)==0){
-			CANx_SetTxHeader(&TxHeader, 0x103, false, 8, CAN_TIxR_Data, dato, dato, 0);
+			CANx_SetTxHeader(&TxHeader, 0x439, false, 8, CAN_TIxR_Data, dato, dato, 0);
 			//0x10000-> ID Tx; true -> Identifier Extended; 8 -> Data Length ; dato -> DataH; dato ->DataL; 0 -> Index Mailbox Tx
 			//CANx_BusOffRecovery(&can);//Enters in recovery mode
 			Delay(100000);//100ms
