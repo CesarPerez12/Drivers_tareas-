@@ -45,7 +45,7 @@ int main(void)
 
 	SYS_CLK.SYSCLK = 80;
 	//Los prescaladores se seleccionan por n=1,2,...,8. Siendo 2^n el valor del preescalador
-	SystClock_Init(&SYS_CLK,2,1,0,1,2);//SYSCLK -> PLLP, SYSPLL -> HSI, preAHB1 -> divided by 2^1
+	SystClock_Init(&SYS_CLK,2,1,0,1,1);//SYSCLK -> PLLP, SYSPLL -> HSI, preAHB1 -> divided by 2^1
 	//preAPB1 -> Not divided, preAPB2 -> not divided, APB1 = 40MHZ, APB2=40MHz.
 
 	//Apuntadores a direcciones de memoria de estructuras
@@ -102,7 +102,7 @@ int main(void)
 			CANx_SetTxHeader(&TxHeader, 0x439, false, 8, CAN_TIxR_Data, dato, dato, 0);
 			//0x10000-> ID Tx; true -> Identifier Extended; 8 -> Data Length ; dato -> DataH; dato ->DataL; 0 -> Index Mailbox Tx
 			//CANx_BusOffRecovery(&can);//Enters in recovery mode
-			Delay(100000);//100ms
+			Delay(500000);//100ms
 			//CANx_EnSECInts(&can);//Colocar la interrupción cuando todo esté conectado correctamente
 			CANx_TxData(&can, &TxHeader);
 			dato++;
