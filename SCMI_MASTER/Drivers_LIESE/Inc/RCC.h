@@ -13,13 +13,22 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-extern uint8_t currentSYSCLK;
-extern uint8_t currentAHB1CLK;
-
-
 //Definición de relojes
 #define HSECLK        8//8MHz
 #define HSICLK        16//16MHz
+
+//Definción de estructuras
+
+typedef struct{
+	uint8_t SYSCLK;
+	uint8_t AHB1CLK;
+	uint8_t APB1CLK;
+	uint8_t APB2CLK;
+	bool    precision;
+}RCC_CLKCFG;
+
+
+extern RCC_CLKCFG SYS_CLK;
 
 //PWR
 #define PWR_BASE      0x40007000UL
@@ -571,13 +580,13 @@ extern uint8_t currentAHB1CLK;
 #define RCC_CSR_PADRSTF                    RCC_CSR_PINRSTF
 #define RCC_CSR_WDGRSTF                    RCC_CSR_IWDGRSTF
 
-bool SystClock_Init(uint8_t sourceSYS, uint8_t sourcePLL, uint8_t SYSCLK, uint8_t preAHB1, uint8_t preAPB1, uint8_t preAPB2);
+bool SystClock_Init(RCC_CLKCFG * SYSCLK, uint8_t sourceSYS ,uint8_t sourcePLL, uint8_t preAHB1, uint8_t preAPB1, uint8_t preAPB2);
 void SystCLK_SetHSION();
 void SystCLK_SetHSEON();
 void SystCLK_SetPLLON(uint8_t sourcePLL);
 uint8_t Calculate_Pot2(uint8_t pot);
-void SystCLK_SetPres(uint8_t preAHB1, uint8_t preAPB1, uint8_t preAPB2);
-void SystCLK_CalculatePLLCFGR(uint8_t sourceSYS, uint8_t PLLCLK, uint16_t SYSCLK,uint8_t preAHB1, uint8_t preAPB1, uint8_t preAPB2, uint8_t up);
+void SystCLK_SetPres(RCC_CLKCFG *SYSCLKCFG, uint8_t preAHB1, uint8_t preAPB1, uint8_t preAPB2);
+void SystCLK_CalculatePLLCFGR(RCC_CLKCFG *SYSCLKCFG, uint8_t sourceSYS, uint8_t PLLCLK,uint8_t preAHB1, uint8_t preAPB1, uint8_t preAPB2, uint8_t up);
 uint8_t SystCLK_GetPLLMStart(uint32_t freq_100, uint8_t valueCLK, uint8_t PLLM, uint8_t up);
 uint16_t SystCLK_GetPLLNStart(uint32_t freq_100, uint8_t valueCLK, uint8_t PLLM, uint16_t PLLN);
 uint8_t SystCLK_CalculatePLL_P_R(uint32_t freq_100, uint8_t valueCLK, uint16_t SYSCLK, uint8_t PLLM, uint16_t PLLN, uint8_t PLL_P_R, uint8_t up);

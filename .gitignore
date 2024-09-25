@@ -57,3 +57,4 @@ release
 *.ld
 *.s
 *.cproject
+*.cfg
