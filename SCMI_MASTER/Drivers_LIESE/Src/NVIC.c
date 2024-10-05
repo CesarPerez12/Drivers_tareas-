@@ -12,7 +12,7 @@
  */
 void NVIC_SetCFGR(uint8_t position, uint8_t priority){
 	uint8_t div1 = position / 32, div2 = position / 4;
-	unsigned int * NVIC_ICERn = ( ( unsigned int * ) (NVIC_BASE + NVIC_ICER + (0x04*div1)) )  ;
+	unsigned int * NVIC_ICPRn = ( ( unsigned int * ) (NVIC_BASE + NVIC_ICPR + (0x04*div1)) )  ;
 	unsigned int * NVIC_ISERn = ( ( unsigned int * ) (NVIC_BASE + NVIC_ISER + (0x04*div1)) )  ;
 	unsigned int * NVIC_IPRn = ( (  unsigned int * ) (NVIC_BASE + NVIC_IPR + (0x04*div2)) )  ;
 
@@ -33,7 +33,7 @@ void NVIC_SetCFGR(uint8_t position, uint8_t priority){
 		}
 	}
 
-	//*NVIC_ICERn |= (1<<position);//Limpia posible bandera pendiente, deshabilitando
+	*NVIC_ICPRn |= (1<<position);//Limpia la posible bandera pendiente, deshabilitando
 	*NVIC_ISERn |= (1<<position);//Habilita la interrupción
 	*NVIC_IPRn|= ((priority<<(div2*8))<<4);//Coloca Prioridad 4*x+3; x= 8 y 7 I2C1
 	//Únicamente se usan los bits 4-7 para la prioridad
