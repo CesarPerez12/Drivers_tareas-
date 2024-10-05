@@ -1,4 +1,5 @@
-Este repositorio contendra archivos .txt, pdf o .doc donde se expliquen los archvios de cabecera y fuente para cada Driver. 
+**Este repositorio contendra archivos .txt, pdf o .doc donde se expliquen los archvios de cabecera y fuente para cada Driver. **
+
 La Rama main, siendo que es la principal, contendra los documentos que generemos para poder explicar de forma general como es que funcionan cada uno de los archivos .h y .c, debido a que estos siempre se incluyen para el manejo de cualquier puerto, siendo importante describir de forma general como es que operan estos. 
 
 Cada rama correspondera a un periferico en especifico, donde también se ecnontrar un documento de texto que ayude a poder explicar como es que funcionan cada una de las funciones para poder llevar a cabo el manejo de cada periferico. 
