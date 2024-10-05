@@ -38,3 +38,4 @@ void NVIC_SetCFGR(uint8_t position, uint8_t priority){
 	*NVIC_IPRn|= ((priority<<(div2*8))<<4);//Coloca Prioridad 4*x+3; x= 8 y 7 I2C1
 	//Únicamente se usan los bits 4-7 para la prioridad
 }
+ 
