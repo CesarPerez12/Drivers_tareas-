@@ -23,8 +23,8 @@ void GPIOx_InitAF(GPIO_TypeDef *Port_, uint8_t Pin_, uint8_t OTYPER_, uint8_t OS
 }
 
 void GPIOx_InitIO(GPIO_TypeDef *Port_, uint8_t Pin_, uint8_t IO, bool PUR){
-	if(IO==GPIO_MODER_OUTPUT){
-		Port_->MODER |= (GPIO_MODER_OUTPUT<<(Pin_*2)); // Salida
+	if(IO==1){
+		Port_->MODER |= (1<<(Pin_*2)); // Salida
 	}
 	else{
 		Port_->MODER &= ~(0x3<<(Pin_*2)); // Entrada

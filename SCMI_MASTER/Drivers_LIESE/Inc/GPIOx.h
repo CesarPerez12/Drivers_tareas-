@@ -45,7 +45,6 @@ typedef struct
 #define GPIOG               ((GPIO_TypeDef *) GPIOG_BASE)
 #define GPIOH               ((GPIO_TypeDef *) GPIOH_BASE)
 
-
 /******************************************************************************/
 /*                                                                            */
 /*                            General Purpose I/O                             */
@@ -898,10 +897,7 @@ typedef struct
 #define GPIO_AFRH_AFRH7_3                GPIO_AFRH_AFSEL15_3
 
 //Simplified Definitions
-#define GPIO_MODER_INPUT				(0U)
-#define GPIO_MODER_OUTPUT				(1U)
 #define GPIO_OTYPER_PP                   0UL //Push pull
-#define GPIO_OTYPER_OD                   1UL //Open Drain
 #define GPIO_OSPEEDR_0                   0UL //
 #define GPIO_MODER_MODE_AF               2UL //Alternate Function
 #define GPIO_OSPEEDR_HS                  3UL //High Speed

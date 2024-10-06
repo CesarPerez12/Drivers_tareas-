@@ -14,6 +14,7 @@
 
 #define STK_CTRL                          (*((volatile unsigned int *)(STK_BASE + 0x0UL)))
 #define STK_LOAD                          (*((volatile unsigned int *)(STK_BASE + 0x4UL)))
+#define STK_VAL                           (*((volatile unsigned int *)(STK_BASE + 0x8UL)))
 
 #define STK_CTRL_ENABLE_MSK               (1UL)
 #define STK_CTRL_ENABLE_POS               (0UL)

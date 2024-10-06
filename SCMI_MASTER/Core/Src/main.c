@@ -21,165 +21,133 @@
 #include "RCC.h"
 #include "SYSTICK.h"
 #include "NVIC.h"
+#include "FPU.h"
 
-#include "CANx.h"
 
-void Delay(uint32_t time);
+#include "I2Cx.h"
 
-void CANx_SetParFLTR(CAN_FilterTypeDef * FLTR, uint8_t index, uint8_t scale, uint16_t IDL, uint16_t IDH,
-		uint16_t MaskL, uint32_t MaskH, uint8_t mode, uint8_t FIFO, bool IDE);
-void CANx_SetParDualFLTR(CAN_DualFilterID_n_MaskTypeDef * FLTR, bool IDE, uint8_t index, uint16_t IDL, uint16_t IDH, uint16_t MaskL, uint16_t MaskH);
-void CANx_SetTxHeader(CAN_TxandRxHeader_TypeDef * TxHeader, uint32_t ID, bool IDE, uint8_t DLC, uint8_t RTR, uint32_t DataH,
-		uint32_t DataL, uint8_t index);
-CAN_TxandRxHeader_TypeDef TxHeader, RxData;
-uint32_t i, dato=1;
-
+#define DBGMCU_CR                 (*( ( volatile unsigned int * ) (0xE0042004)  ) )
+//**Direcciones del DS1307
+static int AdreDS1307 = 0x68;///Dirección del RTC DS1307
+int AdreSec= 0x00;
+int AdreMin=0x01;
+// Variables para manejar los valores del RTC
+//uint8_t segundos, minutos, horas, dia, fecha, mes, anio;
+uint32_t i;
+static uint8_t buffer[8]= {0xf} , bufferI2CTx[8];
+I2C_HandlerDef *direccion;
+static uint8_t *buff;
+/*
+uint8_t buffersym[2];
+uint8_t bufferhyd[2];
+uint8_t bufferfym[2];
+*/
+//
+void CargarFecha();
+void leerFecha();
+void I2Cx_ResetStruct( I2C_HandlerDef * i2c ,I2C_TypeDef * i2cbase);
 int main(void)
 {
-	CAN_FilterTypeDef FLTR[2];
-	CAN_DualFilterID_n_MaskTypeDef dualFLTR[2];
-	CAN_Handler can, Can2;
-	CAN_BitTimingTypeDef tq;
-	can.Register=CAN1;
-	Can2.Register=CAN2;
-
-	SYS_CLK.SYSCLK = 80;
+	//SCB->AIRCR = (0x700|(0x5FA<<16));
+	//DBGMCU_CR |= 7;
 	//Los prescaladores se seleccionan por n=1,2,...,8. Siendo 2^n el valor del preescalador
-	SystClock_Init(&SYS_CLK,2,1,0,1,1);//SYSCLK -> PLLP, SYSPLL -> HSI, preAHB1 -> divided by 2^1
-	//preAPB1 -> Not divided, preAPB2 -> not divided, APB1 = 40MHZ, APB2=40MHz.
+	SystClock_Init(2,0,64,0,1,1);//SYSCLK -> PLLP, SYSPLL -> HSI, SYSCLK -> 80MHz, preAHB1 -> divided by 2^1
+	 //preAPB1 -> Not divided, preAPB2 -> not divided, APB1 = 40MHZ, APB2=40MHz.
+	RCC_APB2ENR |= RCC_APB2ENR_SYSCFGEN;
+	//STK_CONF(64);
+	I2Cx_ResetStruct(&I2C1_Struct, I2C1_R);
+	I2Cx_GPIO_Init(false, I2C1);//pull up on
+	I2Cx_Init(32,1,&I2C1_Struct);//10MHz, 0 -> Standard mode; 1 -> Fast Mode
+	NVIC_SetCFGR(NVIC_I2C1EV_POSITION, 3);
+	//NVIC_SetCFGR(NVIC_I2C1ER_POSITION, 4);
+	//I2Cx_DisableIT(&I2C1_Struct);
+	I2Cx_ADDRSet(AdreDS1307-15, 1, 32, &I2C1_Struct);//Address of Device, 0 -> 7 bits addressing, 0 -> APB1_freq (Set Only in 10 bits and Master Mode)
+	//I2Cx_ResetACK(&I2C1_Struct);
+	//direccion=&I2C1_Struct;
+	//buff=bufferI2C;
+	//CargarFecha(); // Función para configurar al esclavo RTC DS1307
+//	for (i = 0; i < 5000000; ++i) ;
+	//buffer[0]=0x00,  buffer[1]=0x40,  buffer[2]=0x09,  buffer[3]=0x04,  buffer[4]=0x31,  buffer[5]=0x10,  buffer[6]=0x19;
+	//bufferI2CTx[0]=AdreSec, bufferI2CTx[1]=0x00,  bufferI2CTx[2]=0x40,  bufferI2CTx[3]=0x09,  bufferI2CTx[4]=0x04,  bufferI2CTx[5]=0x31,  bufferI2CTx[6]=0x10,  bufferI2CTx[7]=0x19;
+	I2Cx_SlaveRx_IT(1, bufferI2CTx, &I2C1_Struct);
 
-	//Apuntadores a direcciones de memoria de estructuras
-	can1=&can;
-	can2=&Can2;
-	ptrRx=&RxData;
-	ptrTx=&TxHeader;
-	//CAN1Tx=true;//Indica transmisión a la interrupción
-
-	CANx_GPIO(GPIOB,8);//CAN1 RX
-	CANx_GPIO(GPIOB,9);//CAN1 TX
-
-	//CANx_GPIO(GPIOB, 5);//CAN2 RX
-	//CANx_GPIO(GPIOB, 6);//CAN2 Tx
-
-	CANx_SetParFLTR(&FLTR[0], 6, CAN_FS1R_D16, 0x466, 0x0, 0x466, 0x0, CAN_FM1R_MaskMode,
-			CAN_FFA1R_FIFO0, false);
-	/*0->Filter 0; CAN_FS1R_D16->16 bits scale; 0x0->IDL,  0x3->IDH;  0x0->MaskL,  0x1->MaskH;
-	CAN_FM1R_MaskMode-> ID in mask mode; CAN_FFA1R_FIFO0-> assigned to FIFO 0, true->Extended ID*/
-	CANx_SetParDualFLTR(&dualFLTR[0], false, 6, 0x12, 0x0, 0x12, 0x0);//Only used in Dual Mode Filter
-	/*false->Standard ID; 0->Filter 0; 0x12->IDL,  0x0->IDH;  0x12->MaskL,  0x0->MaskH */
-	//CANx_SetParFLTR(&FLTR[1], 1, CAN_FS1R_D16, 1200, 1201, 0xFFFF, 0xFFFF, CAN_FM1R_MaskMode, CAN_FFA1R_FIFO1);
-	//CANx_SetParFLTR(&FLTR[1], 18, CAN_FS1R_D16, 0x8000, 0x3, 0x0, 0x1, CAN_FM1R_MaskMode,
-			//CAN_FFA1R_FIFO0, true);
-	//CANx_SetParDualFLTR(&dualFLTR[1], false, 18, 0x8, 0x8, 0x8, 0x8);
-	//Time quanta Parameters
-	tq.ntq = 20;//20 times for 40MHz
-	tq.bps = 1000000;//1Mbps
-	tq.SJW = 0;//SJW=1
-
-	CANx_Init(&can, FLTR, dualFLTR, &tq, false, 0, 1);//can struct; array of sturct FLTR; array of dualFLTR; tq struct;
-	//false->No dual mode; 0->Number of filter for CAN2 slave; 1->Number of filters to configure
-
-	//NVIC_SetCFGR(CAN1_Tx_IRQ, 3);//Enable Tx Int
-	NVIC_SetCFGR(CAN1_Rx0_IRQ, 4);//Enable Rx0 Int
-	NVIC_SetCFGR(CAN1_Rx1_IRQ, 5);//Enable Rx1 Int
-	//NVIC_SetCFGR(CAN2_Rx0_IRQ, 4);//Enable Rx0 Int
-	//NVIC_SetCFGR(CAN2_Rx1_IRQ, 5);//Enable Rx1 Int
-	//NVIC_SetCFGR(CAN1_SCE_IRQ, 6);//Enable SCE Int
-
-	//CANx_EnTxInt(&can);//Set Interrupt
-	CANx_EnFIFO1Ints(&can);//Set Interrupt
-	CANx_EnFIFO0Ints(&can);//Set Interrupt
-	//CANx_EnFIFO1Ints(&Can2);//Set Interrupt
-	//CANx_EnFIFO0Ints(&Can2);//Set Interrupt
 	RCC_EnPort(GPIOC);
-	GPIOx_InitIO(GPIOC, 13, GPIO_MODER_INPUT, true);
+	GPIOx_InitIO(GPIOC, 13, 0, false);
 
-    /* Loop forever */
 	while(1){
-
-		/*Code for polling*/
+/*
 		if((GPIOC->IDR&GPIO_IDR_ID13)==0){
-			CANx_SetTxHeader(&TxHeader, 0x439, false, 8, CAN_TIxR_Data, dato, dato, 0);
-			//0x10000-> ID Tx; true -> Identifier Extended; 8 -> Data Length ; dato -> DataH; dato ->DataL; 0 -> Index Mailbox Tx
-			//CANx_BusOffRecovery(&can);//Enters in recovery mode
-			Delay(500000);//100ms
-			//CANx_EnSECInts(&can);//Colocar la interrupción cuando todo esté conectado correctamente
-			CANx_TxData(&can, &TxHeader);
-			dato++;
-			//CANx_SetTxHeader(&TxHeader, 0x10000, true, 8, CAN_TIxR_Data, dato, dato, 0);
-			//for (i = 0; i < 10000000; ++i);// Retardo
-			//CANx_TxRemote(&can, &TxHeader);
-			//for (i = 0; i < 100000000; ++i);// Retardo
-			//CANx_TxData(&can, &TxHeader);
-			//CANx_RxFIFO0(&can, &RxData);
-			//CANx_RxFIFO1(&can, &RxData);
+			for (i = 0; i < 10000000; ++i) ;
+			buffer[0]++;
+			//I2Cx_MasterTx(0x59, buffer, 1, &I2C1_Struct);
+			I2Cx_MasterTx_IT(0x59, 1, buffer, &I2C1_Struct);
+			I2Cx_WaitBUSYReset(&I2C1_Struct);
 		}
-
+*/
+		//bufferI2CTx[0]++;
+		//for (i = 0; i < 10000000; ++i) ;
+	    //leerFecha();
+		//I2Cx_SlaveTx(buffer, 7, &I2C1_Struct);
+		//I2Cx_DisableIT(&I2C1_Struct);
+		//i++;
+		//buffer[0]=i;
+		//I2Cx_SlaveRx(bufferI2C, 1, &I2C1_Struct);
+		//I2Cx_DisableIT(&I2C1_Struct);
 	}
 }
+//RTC Incrementa la dirección o se puede ir escribiendo por una
+//primero mandando la dirección y luego el dato, lo mismo con la lectura
+void CargarFecha(){
+	uint8_t buff[8];
+    /*
+     Programar: Jueves 31 de octubre del 2019, a las 9:40:00 pm
 
-void CANx_SetParFLTR(
-		CAN_FilterTypeDef * FLTR,
-		uint8_t index,
-		uint8_t scale,
-		uint16_t IDL,
-		uint16_t IDH,
-		uint16_t MaskL,
-		uint32_t MaskH,
-		uint8_t mode,
-		uint8_t FIFO,
-		bool IDE)
-{
-	FLTR->indexFltr=index;
-	FLTR->bitscale=scale;
-	FLTR->ID_L=IDL;
-	FLTR->ID_H=IDH;
-	FLTR->Mask_L=MaskL;
-	FLTR->Mask_H=MaskH;
-	FLTR->modeFltr=mode;
-	FLTR->FIFO=FIFO;
-	FLTR->IDE= IDE;
+    El mapa de memoria del DS1207 es el siguiente:
+    DIRECCIÓN  FUNCIÓN    BIT7   BIT6  BIT5  BIT4  BIT3  BIT2  BIT1   BIT0
+        00h    Segundos     0     0     0      0    0      0    0       0
+        01h     Minutos     0     0     0      0    0      0    0       0
+        02h     Horas       0     0     0      1    0      0    0       0
+        03h     Día         0     0     1      1    0      0    0       1
+        04h     Fecha       0     0     0      0    0      1    0       0
+        05h     Mes         0     0     0      1    0      0    0       0
+        06h     Año         0     0     0      1    1      0    0       1
+        07h     Control     0     0     0      0    0      0    1       1
+     08h-3Fh    RAM 56x8
+     */
+    //Por lo tanto
+
+	buff[0]=AdreSec, buff[1]=0x00,  buff[2]=0x40,  buff[3]=0x09,  buff[4]=0x04,  buff[5]=0x31,  buff[6]=0x10,  buff[7]=0x19;
+	//bufferI2C[0]=AdreSec, bufferI2C[1]=0x00,  bufferI2C[2]=0x40,  bufferI2C[3]=0x09,  bufferI2C[4]=0x04,  bufferI2C[5]=0x31,  bufferI2C[6]=0x10,  bufferI2C[7]=0x19;
+	//Sin interrupción
+	I2Cx_MasterTx(AdreDS1307, buff, 8, &I2C1_Struct);
+	I2Cx_WaitBUSYReset(&I2C1_Struct);
+	//Con interrupción
+	//I2Cx_MasterTx_IT(AdreDS1307, 8, bufferI2C, &I2C1_Struct);
+	//for (i = 0; i < 500000; ++i) ;
+}
+//Se puede enviar la dirección desde la cuál comenzará y después se leen los datos
+//O se puede ir leyendo una a una, transmitiendo y recibiendo
+void leerFecha(){
+	//Sin interrupción
+	I2Cx_MasterTx(AdreDS1307, 0, 1, &I2C1_Struct);
+	I2Cx_WaitBUSYReset(&I2C1_Struct);
+	I2Cx_MasterRx(AdreDS1307, buffer, 7, &I2C1_Struct);
+	I2Cx_WaitBUSYReset(&I2C1_Struct);
+	//Con interrupción
+	//I2Cx_EnableIT(&I2C1_Struct);
+	//bufferI2C[0]=0;
+	//I2Cx_MasterTx_IT(AdreDS1307, 1, bufferI2C, &I2C1_Struct);
+	//for (i = 0; i < 5000000; ++i) ;
+	//I2Cx_MasterRx_IT(AdreDS1307, 7, bufferI2CRx, &I2C1_Struct);
+	//for (i = 0; i < 500000; ++i) ;
 }
 
-void CANx_SetParDualFLTR(
-		CAN_DualFilterID_n_MaskTypeDef * FLTR,
-		bool      IDE,
-		uint8_t index,
-		uint16_t IDL,
-		uint16_t IDH,
-		uint16_t MaskL,
-		uint16_t MaskH)
-{
-	FLTR->IDE = IDE;
-	FLTR->indexFltr=index;
-	FLTR->ID_L=IDL;
-	FLTR->ID_H=IDH;
-	FLTR->Mask_L= MaskL;
-	FLTR->Mask_H= MaskH;
-}
+void I2Cx_ResetStruct( I2C_HandlerDef * i2c ,I2C_TypeDef * i2cbase){
+    i2c->Registers = i2cbase;
+    i2c->Parameter.ADDRDevice=0;
+    i2c->Parameter.TX_RX_mode=0;
+    i2c->Parameter.modeAddressing=0;
+    i2c->Parameter.own_address=0;
+    i2c->currentState=0;
 
-void CANx_SetTxHeader(
-		CAN_TxandRxHeader_TypeDef * TxHeader,
-		uint32_t ID,
-		bool     IDE,
-	    uint8_t  DLC,
-		uint8_t  RTR,
-		uint32_t DataH,
-		uint32_t DataL,
-		uint8_t  index)
-{
-	TxHeader->Identifier = ID;
-	TxHeader->IDE = IDE;
-	TxHeader->DLC = DLC;
-	TxHeader->RTR = RTR;
-	TxHeader->DataH = DataH;
-	TxHeader->DataL = DataL;
-	TxHeader->Index = index;
-
-}
-
-void Delay(uint32_t time){
-	uint32_t load = 0, i = 0;
-	load = (SYS_CLK.AHB1CLK * time) / 14;//1MHz*1us = 1s; 14 instrucciones para un ciclo de for
-	for (i = 0; i < load; ++i);
 }
