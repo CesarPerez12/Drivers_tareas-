@@ -8,10 +8,8 @@
 #include "RCC.h"
 #include "SYSCFG.h"
 #include "embeddedFLASH.h"
-#include "MacroFunctions.h"
 #include "GPIOx.h"
-
- RCC_CLKCFG SYS_CLK;//Variable a utilizar
+RCC_CLKCFG SYS_CLK;//Variable a utilizar
 /*RCC es 16MHz de manera predeterminada
 //Configuración predeterminada RCC
 //PLLM: 0.95MHz-2.1MHz
@@ -82,7 +80,7 @@ void SystCLK_SetPres(RCC_CLKCFG *SYSCLKCFG, uint8_t preAHB1, uint8_t preAPB1, ui
 	}
 
 	if(preAHB1>4){
-		divAHB1 = (SYSCLK) / (Calculate_Pot2(preAHB1+1));
+		divAHB1 /= 2;
 	}
 
 	if(divAHB1>=2){//Dentro del rango
@@ -101,6 +99,11 @@ void SystCLK_SetPres(RCC_CLKCFG *SYSCLKCFG, uint8_t preAHB1, uint8_t preAPB1, ui
 	divAPB1 = (SYSCLK) / (Calculate_Pot2(preAHB1+preAPB1));
 	divAPB2 = (SYSCLK) / (Calculate_Pot2(preAHB1+preAPB2));
 
+	if(preAHB1>4){
+		divAPB1 /= 2;
+		divAPB2 /= 2;
+	}
+
 	if((divAPB1>=2)&&(divAPB1<=45)){
 	    if(preAPB1!=0){
 	    	RCC_CFGR |= ((3+preAPB1)<<RCC_CFGR_PPRE1_Pos);
@@ -112,6 +115,9 @@ void SystCLK_SetPres(RCC_CLKCFG *SYSCLKCFG, uint8_t preAHB1, uint8_t preAPB1, ui
 		i=0;
 		while((divAPB1<=45)||(i>=5)) {
 			divAPB1 = (SYSCLK) / (Calculate_Pot2(i+preAHB1));
+			if(preAHB1>4){
+				divAPB1 /= 2;
+			}
 		}
 		if(i!=0){
 			RCC_CFGR |= ((3+i)<<RCC_CFGR_PPRE1_Pos);
@@ -131,12 +137,15 @@ void SystCLK_SetPres(RCC_CLKCFG *SYSCLKCFG, uint8_t preAHB1, uint8_t preAPB1, ui
 		i=0;
 		while((divAPB2<=45)||(i>=5)) {
 			divAPB2 = (SYSCLK) / (Calculate_Pot2(i+preAHB1));
+			if(preAHB1>4){
+				divAPB2 /= 2;
+			}
 		}
 		if(i!=0){
 			RCC_CFGR |= ((3+i)<<RCC_CFGR_PPRE2_Pos);
 		}
 		decimal = (((uint32_t)(divAPB2))*100) - ((100*(SYSCLK)) / (Calculate_Pot2(preAHB1+i)));
-		SYSCLKCFG->APB1CLK = divAPB2;
+		SYSCLKCFG->APB2CLK = divAPB2;
 	}
 
 	if(decimal){
@@ -299,6 +308,3 @@ void SystCLK_SetPLLPredet(){
 	embbFLash_Conf(80);//Se configuran los ciclos de la memoria Flash
 	SystCLK_SetPLLON(1);
 }
-
-
-

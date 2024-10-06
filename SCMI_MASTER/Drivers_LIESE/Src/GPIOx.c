@@ -22,21 +22,6 @@ void GPIOx_InitAF(GPIO_TypeDef *Port_, uint8_t Pin_, uint8_t OTYPER_, uint8_t OS
 	//Veificar IDR? Debe estar en 1 los puertos
 }
 
-void GPIOx_InitIO(GPIO_TypeDef *Port_, uint8_t Pin_, uint8_t IO, bool PUR){
-	if(IO==GPIO_MODER_OUTPUT){
-		Port_->MODER |= (GPIO_MODER_OUTPUT<<(Pin_*2)); // Salida
-	}
-	else{
-		Port_->MODER &= ~(0x3<<(Pin_*2)); // Entrada
-	}
-	if(PUR){
-		Port_->PUPDR |= (GPIO_PUPDR_PUPD0_0<<(Pin_*2));//Resistencias Pull UP
-	}
-	else{
-		Port_->PUPDR &= (~(GPIO_PUPDR_PUPD0)<<(Pin_*2));//Desactiva
-	}
-}
-
 void RCC_EnPort(GPIO_TypeDef *port){
 	if(port==GPIOA){
 		RCC_AHB1ENR |= RCC_AHB1ENR_GPIOAEN ;

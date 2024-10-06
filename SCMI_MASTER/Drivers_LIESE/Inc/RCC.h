@@ -13,6 +13,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include <stdint.h>
+#include <stdbool.h>
+
 //Definición de relojes
 #define HSECLK        8//8MHz
 #define HSICLK        16//16MHz
@@ -591,5 +594,4 @@ uint8_t SystCLK_GetPLLMStart(uint32_t freq_100, uint8_t valueCLK, uint8_t PLLM, 
 uint16_t SystCLK_GetPLLNStart(uint32_t freq_100, uint8_t valueCLK, uint8_t PLLM, uint16_t PLLN);
 uint8_t SystCLK_CalculatePLL_P_R(uint32_t freq_100, uint8_t valueCLK, uint16_t SYSCLK, uint8_t PLLM, uint16_t PLLN, uint8_t PLL_P_R, uint8_t up);
 void SystCLK_SetPLLPredet();
-
 #endif /* RCC_H_ */

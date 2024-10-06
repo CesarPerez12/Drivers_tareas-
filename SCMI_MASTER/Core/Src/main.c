@@ -21,165 +21,94 @@
 #include "RCC.h"
 #include "SYSTICK.h"
 #include "NVIC.h"
-
-#include "CANx.h"
-
-void Delay(uint32_t time);
-
-void CANx_SetParFLTR(CAN_FilterTypeDef * FLTR, uint8_t index, uint8_t scale, uint16_t IDL, uint16_t IDH,
-		uint16_t MaskL, uint32_t MaskH, uint8_t mode, uint8_t FIFO, bool IDE);
-void CANx_SetParDualFLTR(CAN_DualFilterID_n_MaskTypeDef * FLTR, bool IDE, uint8_t index, uint16_t IDL, uint16_t IDH, uint16_t MaskL, uint16_t MaskH);
-void CANx_SetTxHeader(CAN_TxandRxHeader_TypeDef * TxHeader, uint32_t ID, bool IDE, uint8_t DLC, uint8_t RTR, uint32_t DataH,
-		uint32_t DataL, uint8_t index);
-CAN_TxandRxHeader_TypeDef TxHeader, RxData;
-uint32_t i, dato=1;
-
-int main(void)
-{
-	CAN_FilterTypeDef FLTR[2];
-	CAN_DualFilterID_n_MaskTypeDef dualFLTR[2];
-	CAN_Handler can, Can2;
-	CAN_BitTimingTypeDef tq;
-	can.Register=CAN1;
-	Can2.Register=CAN2;
-
-	SYS_CLK.SYSCLK = 80;
-	//Los prescaladores se seleccionan por n=1,2,...,8. Siendo 2^n el valor del preescalador
-	SystClock_Init(&SYS_CLK,2,1,0,1,1);//SYSCLK -> PLLP, SYSPLL -> HSI, preAHB1 -> divided by 2^1
-	//preAPB1 -> Not divided, preAPB2 -> not divided, APB1 = 40MHZ, APB2=40MHz.
-
-	//Apuntadores a direcciones de memoria de estructuras
-	can1=&can;
-	can2=&Can2;
-	ptrRx=&RxData;
-	ptrTx=&TxHeader;
-	//CAN1Tx=true;//Indica transmisión a la interrupción
-
-	CANx_GPIO(GPIOB,8);//CAN1 RX
-	CANx_GPIO(GPIOB,9);//CAN1 TX
-
-	//CANx_GPIO(GPIOB, 5);//CAN2 RX
-	//CANx_GPIO(GPIOB, 6);//CAN2 Tx
-
-	CANx_SetParFLTR(&FLTR[0], 6, CAN_FS1R_D16, 0x466, 0x0, 0x466, 0x0, CAN_FM1R_MaskMode,
-			CAN_FFA1R_FIFO0, false);
-	/*0->Filter 0; CAN_FS1R_D16->16 bits scale; 0x0->IDL,  0x3->IDH;  0x0->MaskL,  0x1->MaskH;
-	CAN_FM1R_MaskMode-> ID in mask mode; CAN_FFA1R_FIFO0-> assigned to FIFO 0, true->Extended ID*/
-	CANx_SetParDualFLTR(&dualFLTR[0], false, 6, 0x12, 0x0, 0x12, 0x0);//Only used in Dual Mode Filter
-	/*false->Standard ID; 0->Filter 0; 0x12->IDL,  0x0->IDH;  0x12->MaskL,  0x0->MaskH */
-	//CANx_SetParFLTR(&FLTR[1], 1, CAN_FS1R_D16, 1200, 1201, 0xFFFF, 0xFFFF, CAN_FM1R_MaskMode, CAN_FFA1R_FIFO1);
-	//CANx_SetParFLTR(&FLTR[1], 18, CAN_FS1R_D16, 0x8000, 0x3, 0x0, 0x1, CAN_FM1R_MaskMode,
-			//CAN_FFA1R_FIFO0, true);
-	//CANx_SetParDualFLTR(&dualFLTR[1], false, 18, 0x8, 0x8, 0x8, 0x8);
-	//Time quanta Parameters
-	tq.ntq = 20;//20 times for 40MHz
-	tq.bps = 1000000;//1Mbps
-	tq.SJW = 0;//SJW=1
-
-	CANx_Init(&can, FLTR, dualFLTR, &tq, false, 0, 1);//can struct; array of sturct FLTR; array of dualFLTR; tq struct;
-	//false->No dual mode; 0->Number of filter for CAN2 slave; 1->Number of filters to configure
-
-	//NVIC_SetCFGR(CAN1_Tx_IRQ, 3);//Enable Tx Int
-	NVIC_SetCFGR(CAN1_Rx0_IRQ, 4);//Enable Rx0 Int
-	NVIC_SetCFGR(CAN1_Rx1_IRQ, 5);//Enable Rx1 Int
-	//NVIC_SetCFGR(CAN2_Rx0_IRQ, 4);//Enable Rx0 Int
-	//NVIC_SetCFGR(CAN2_Rx1_IRQ, 5);//Enable Rx1 Int
-	//NVIC_SetCFGR(CAN1_SCE_IRQ, 6);//Enable SCE Int
-
-	//CANx_EnTxInt(&can);//Set Interrupt
-	CANx_EnFIFO1Ints(&can);//Set Interrupt
-	CANx_EnFIFO0Ints(&can);//Set Interrupt
-	//CANx_EnFIFO1Ints(&Can2);//Set Interrupt
-	//CANx_EnFIFO0Ints(&Can2);//Set Interrupt
-	RCC_EnPort(GPIOC);
-	GPIOx_InitIO(GPIOC, 13, GPIO_MODER_INPUT, true);
-
-    /* Loop forever */
-	while(1){
-
-		/*Code for polling*/
-		if((GPIOC->IDR&GPIO_IDR_ID13)==0){
-			CANx_SetTxHeader(&TxHeader, 0x439, false, 8, CAN_TIxR_Data, dato, dato, 0);
-			//0x10000-> ID Tx; true -> Identifier Extended; 8 -> Data Length ; dato -> DataH; dato ->DataL; 0 -> Index Mailbox Tx
-			//CANx_BusOffRecovery(&can);//Enters in recovery mode
-			Delay(500000);//100ms
-			//CANx_EnSECInts(&can);//Colocar la interrupción cuando todo esté conectado correctamente
-			CANx_TxData(&can, &TxHeader);
-			dato++;
-			//CANx_SetTxHeader(&TxHeader, 0x10000, true, 8, CAN_TIxR_Data, dato, dato, 0);
-			//for (i = 0; i < 10000000; ++i);// Retardo
-			//CANx_TxRemote(&can, &TxHeader);
-			//for (i = 0; i < 100000000; ++i);// Retardo
-			//CANx_TxData(&can, &TxHeader);
-			//CANx_RxFIFO0(&can, &RxData);
-			//CANx_RxFIFO1(&can, &RxData);
-		}
-
+#include "UARTx.h"
+uint8_t dato;
+uint8_t intFlag;
+void USART1_IRQHandler(void){
+	intFlag = UARTx_GetInterruptFlags(&UART1_Struct);
+	while(!(UARTx_SolveCurrentErrors(&UART1_Struct,UARTx_GetCurrentErrors(&UART1_Struct)))){
+		UARTx_SolveCurrentErrors(&UART1_Struct,UARTx_GetCurrentErrors(&UART1_Struct));
+	}
+	if(!((intFlag&UART_SR_RXNE)==0)){
+		dato=UART1_Struct.Registers->DR;
+		UART1_Struct.Registers->SR &=~UART_SR_RXNE;
+	}else if(!((intFlag&UART_SR_TC)==0)){
+		UART1_Struct.Registers->SR &=~UART_SR_TC;
+	}else if(!((intFlag&UART_SR_TXE)==0)){
+		UART1_Struct.Registers->DR = 0xFF;
+		UART1_Struct.Registers->SR &=~UART_SR_TXE;
+	}
+}
+void UART4_IRQHandler(void){
+	intFlag = UARTx_GetInterruptFlags(&UART4_Struct);
+	while(!(UARTx_SolveCurrentErrors(&UART4_Struct,UARTx_GetCurrentErrors(&UART4_Struct)))){
+		UARTx_SolveCurrentErrors(&UART4_Struct,UARTx_GetCurrentErrors(&UART4_Struct));
+	}
+	if(!((intFlag&UART_SR_RXNE)==0)){
+		dato=UART4_Struct.Registers->DR;
+		UART4_Struct.Registers->SR &=~UART_SR_RXNE;
+	}else if(!((intFlag&UART_SR_TC)==0)){
+		UART4_Struct.Registers->SR &=~UART_SR_TC;
+	}else if(!((intFlag&UART_SR_TXE)==0)){
+		UART4_Struct.Registers->DR = 0xFF;
+		UART4_Struct.Registers->SR &=~UART_SR_TXE;
 	}
 }
 
-void CANx_SetParFLTR(
-		CAN_FilterTypeDef * FLTR,
-		uint8_t index,
-		uint8_t scale,
-		uint16_t IDL,
-		uint16_t IDH,
-		uint16_t MaskL,
-		uint32_t MaskH,
-		uint8_t mode,
-		uint8_t FIFO,
-		bool IDE)
-{
-	FLTR->indexFltr=index;
-	FLTR->bitscale=scale;
-	FLTR->ID_L=IDL;
-	FLTR->ID_H=IDH;
-	FLTR->Mask_L=MaskL;
-	FLTR->Mask_H=MaskH;
-	FLTR->modeFltr=mode;
-	FLTR->FIFO=FIFO;
-	FLTR->IDE= IDE;
+void USART2_IRQHandler(void){
+	intFlag = UARTx_GetInterruptFlags(&UART2_Struct);
+		while(!(UARTx_SolveCurrentErrors(&UART2_Struct,UARTx_GetCurrentErrors(&UART2_Struct)))){
+			UARTx_SolveCurrentErrors(&UART2_Struct,UARTx_GetCurrentErrors(&UART2_Struct));
+		}
+		if(!((intFlag&UART_SR_RXNE)==0)){
+			dato=UART2_Struct.Registers->DR;
+			UART2_Struct.Registers->SR &=~UART_SR_RXNE;
+		}else if(!((intFlag&UART_SR_TC)==0)){
+			UART2_Struct.Registers->SR &=~UART_SR_TC;
+		}else if(!((intFlag&UART_SR_TXE)==0)){
+			UART2_Struct.Registers->DR = 0xFF;
+			UART2_Struct.Registers->SR &=~UART_SR_TXE;
+		}
 }
-
-void CANx_SetParDualFLTR(
-		CAN_DualFilterID_n_MaskTypeDef * FLTR,
-		bool      IDE,
-		uint8_t index,
-		uint16_t IDL,
-		uint16_t IDH,
-		uint16_t MaskL,
-		uint16_t MaskH)
-{
-	FLTR->IDE = IDE;
-	FLTR->indexFltr=index;
-	FLTR->ID_L=IDL;
-	FLTR->ID_H=IDH;
-	FLTR->Mask_L= MaskL;
-	FLTR->Mask_H= MaskH;
+void USART3_IRQHandler(void){
+	intFlag = UARTx_GetInterruptFlags(&UART3_Struct);
+		while(!(UARTx_SolveCurrentErrors(&UART3_Struct,UARTx_GetCurrentErrors(&UART3_Struct)))){
+			UARTx_SolveCurrentErrors(&UART3_Struct,UARTx_GetCurrentErrors(&UART3_Struct));
+		}
+		if(!((intFlag&UART_SR_RXNE)==0)){
+			dato=UART3_Struct.Registers->DR;
+			UART3_Struct.Registers->SR &=~UART_SR_RXNE;
+		}else if(!((intFlag&UART_SR_TC)==0)){
+			UART3_Struct.Registers->SR &=~UART_SR_TC;
+		}else if(!((intFlag&UART_SR_TXE)==0)){
+			UART3_Struct.Registers->DR = 0xFF;
+			UART3_Struct.Registers->SR &=~UART_SR_TXE;
+		}
 }
-
-void CANx_SetTxHeader(
-		CAN_TxandRxHeader_TypeDef * TxHeader,
-		uint32_t ID,
-		bool     IDE,
-	    uint8_t  DLC,
-		uint8_t  RTR,
-		uint32_t DataH,
-		uint32_t DataL,
-		uint8_t  index)
-{
-	TxHeader->Identifier = ID;
-	TxHeader->IDE = IDE;
-	TxHeader->DLC = DLC;
-	TxHeader->RTR = RTR;
-	TxHeader->DataH = DataH;
-	TxHeader->DataL = DataL;
-	TxHeader->Index = index;
-
+void USART6_IRQHandler(void){
+	intFlag = UARTx_GetInterruptFlags(&UART6_Struct);
+		while(!(UARTx_SolveCurrentErrors(&UART6_Struct,UARTx_GetCurrentErrors(&UART6_Struct)))){
+			UARTx_SolveCurrentErrors(&UART6_Struct,UARTx_GetCurrentErrors(&UART6_Struct));
+		}
+		if(!((intFlag&UART_SR_RXNE)==0)){
+			dato=UART6_Struct.Registers->DR;
+			UART6_Struct.Registers->SR &=~UART_SR_RXNE;
+		}else if(!((intFlag&UART_SR_TC)==0)){
+			UART6_Struct.Registers->SR &=~UART_SR_TC;
+		}else if(!((intFlag&UART_SR_TXE)==0)){
+			UART6_Struct.Registers->SR &=~UART_SR_TXE;
+		}
 }
-
-void Delay(uint32_t time){
-	uint32_t load = 0, i = 0;
-	load = (SYS_CLK.AHB1CLK * time) / 14;//1MHz*1us = 1s; 14 instrucciones para un ciclo de for
-	for (i = 0; i < load; ++i);
+int main(void){
+	SYS_CLK.SYSCLK = 16;
+	UARTx_ResetStruct(&UART3_Struct,UART3_R);
+	UARTx_GPIO_Init(&UART3_Struct);
+	UARTx_Init(9600,0x00,0x01,0x02,true,true,&UART3_Struct); //9600 baudrate, sobremuestreo por 8, 8-b de datos, even parity, transmisor y receptor habilitados
+	UARTx_InterruptEN(&UART3_Struct,true,false,false,0);
+	//UARTx_InterruptEN(&UART3_Struct,false,false,true,1);
+	//UARTx_HalfDuplexSingleWire(&UART3_Struct);
+	while(1){
+		//dato=UARTx_receiveData(&UART3_Struct);
+	}
+	return 0;
 }
